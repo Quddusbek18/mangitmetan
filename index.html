@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Mangit Metan</title>
+<title>Мангит Метан</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@600&display=swap">
 <style>
 :root{
   --bg:#F7F5F2; --surface:#FFFFFF; --border:#E3DED6; --fg:#241F1A; --muted:#7A7168;
-  --accent:#B5651D; --accent-fg:#FFFFFF; --good:#2E7D4F; --bad:#B3261E; --warn:#B8860B;
+  --accent:#B5651D; --accent-fg:#FFFFFF; --good:#2E7D4F; --bad:#B3261E; --warn:#B8860B; --orange:#C1590B;
   --blue:#2B5F8A; --purple:#6B4E9E;
   --font-display:'Fraunces',Georgia,serif; --font-body:'Inter',system-ui,-apple-system,sans-serif; --font-mono:'JetBrains Mono',ui-monospace,monospace;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     --bg:#181512; --surface:#221E19; --border:#3A342C; --fg:#F1ECE4; --muted:#A79E92;
-    --accent:#E08A3C; --accent-fg:#181512; --good:#5FBE84; --bad:#F2938A; --warn:#E0B84C;
+    --accent:#E08A3C; --accent-fg:#181512; --good:#5FBE84; --bad:#F2938A; --warn:#E0B84C; --orange:#F0954D;
     --blue:#7FB0DD; --purple:#B69AE6;
   }
 }
@@ -64,9 +64,24 @@ th{color:var(--muted);font-weight:600;font-size:.7rem;text-transform:uppercase}
 .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.72rem;font-weight:700}
 .pill.bad{background:color-mix(in srgb, var(--bad) 18%, transparent);color:var(--bad)}
 .pill.good{background:color-mix(in srgb, var(--good) 18%, transparent);color:var(--good)}
+.pill.orange{background:color-mix(in srgb, var(--orange) 18%, transparent);color:var(--orange)}
+.pill.warn{background:color-mix(in srgb, var(--warn) 18%, transparent);color:var(--warn)}
 .hint{font-size:.78rem;color:var(--muted);margin-top:2px}
+.pl-row{display:flex;justify-content:space-between;align-items:baseline;padding:7px 2px;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums;font-size:.9rem}
+.pl-row.pl-indent{padding-left:14px;font-size:.83rem;color:var(--muted)}
+.pl-row.pl-bold{font-weight:700;font-size:1rem;border-bottom:2px solid var(--fg);margin-top:4px}
+.pl-row .good-text{color:var(--good)}
+.pl-row .bad-text{color:var(--bad)}
 .empty{color:var(--muted);font-size:.85rem;padding:12px 0;text-align:center}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 18px;border-radius:10px;font-size:.85rem;opacity:0;pointer-events:none;transition:opacity .25s;z-index:50}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow-y:auto;z-index:100}
+.review-box{background:var(--bg);border-radius:14px;max-width:560px;width:100%;padding:18px;margin:auto}
+.review-box h2{margin:0 0 4px}
+.review-section{margin-top:14px;padding-top:10px;border-top:1px solid var(--border)}
+.review-section h3{font-size:.78rem;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);margin:0 0 6px}
+.review-row{display:flex;justify-content:space-between;padding:4px 0;font-size:.9rem;font-variant-numeric:tabular-nums}
+.review-row .k{color:var(--muted)}
+.review-warn{background:color-mix(in srgb, var(--warn) 15%, transparent);color:var(--warn);border-radius:10px;padding:10px 12px;font-size:.85rem;margin-top:12px;font-weight:600}
 .toast.show{opacity:1}
 .section-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 .login-card{max-width:360px;margin:60px auto;text-align:center}
@@ -77,7 +92,7 @@ th{color:var(--muted);font-weight:600;font-size:.7rem;text-transform:uppercase}
 </head>
 <body>
 <div class="wrap" id="app">
-  <div class="empty" id="globalLoading">Yuklanmoqda…</div>
+  <div class="empty" id="globalLoading">Юкланмоқда…</div>
 </div>
 <div class="toast" id="toast"></div>
 
@@ -103,7 +118,7 @@ let state = {
   companies: [], prices: [], taxRates: [], fixedCosts: [], prepayments: [], otherExpenses: [],
   entries: [], deliveries: [], payments: []
 };
-let pending = { deliveries: [], payments: [] };
+let pending = { deliveries: [] };
 let activeTab = null;
 
 const fmt = n => (n===null||n===undefined||isNaN(n)) ? '—' : Math.round(n).toLocaleString('en-US').replace(/,/g,' ');
@@ -128,11 +143,11 @@ async function boot(){
 function renderLogin(){
   document.getElementById('app').innerHTML = `
     <div class="card login-card">
-      <h1>Mangit Metan</h1>
-      <p class="sub">Kunlik hisobot va boshqaruv tizimi</p>
+      <h1>Мангит Метан</h1>
+      <p class="sub">Кунлик ҳисобот ва бошқарув тизими</p>
       <div class="field" style="text-align:left"><label>Email</label><input type="email" id="loginEmail"></div>
-      <div class="field" style="text-align:left"><label>Parol</label><input type="password" id="loginPass"></div>
-      <button class="btn" style="width:100%" id="loginBtn" onclick="doLogin()">Kirish</button>
+      <div class="field" style="text-align:left"><label>Парол</label><input type="password" id="loginPass"></div>
+      <button class="btn" style="width:100%" id="loginBtn" onclick="doLogin()">Кириш</button>
       <p class="hint" id="loginErr" style="color:var(--bad)"></p>
     </div>`;
   document.getElementById('loginPass').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
@@ -142,10 +157,10 @@ async function doLogin(){
   const email = document.getElementById('loginEmail').value.trim();
   const password = document.getElementById('loginPass').value;
   const btn = document.getElementById('loginBtn');
-  btn.disabled = true; btn.textContent = 'Tekshirilmoqda…';
+  btn.disabled = true; btn.textContent = 'Текширилмоқда…';
   const { data, error } = await sb.auth.signInWithPassword({ email, password });
-  btn.disabled = false; btn.textContent = 'Kirish';
-  if(error){ document.getElementById('loginErr').textContent = 'Email yoki parol xato'; return; }
+  btn.disabled = false; btn.textContent = 'Кириш';
+  if(error){ document.getElementById('loginErr').textContent = 'Email ёки парол хато'; return; }
   await afterLogin(data.session);
 }
 
@@ -157,7 +172,7 @@ async function afterLogin(session){
   state.session = session;
   const { data: profile, error } = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
   if(error || !profile){
-    document.getElementById('app').innerHTML = `<div class="card login-card"><p>Hisobingiz hali rolga bog'lanmagan. CEO bilan bog'laning.</p><button class="btn secondary" onclick="doLogout()">Chiqish</button></div>`;
+    document.getElementById('app').innerHTML = `<div class="card login-card"><p>Ҳисобингиз ҳали ролга боғланмаган. CEO билан боғланинг.</p><button class="btn secondary" onclick="doLogout()">Чиқиш</button></div>`;
     return;
   }
   state.profile = profile;
@@ -178,7 +193,7 @@ async function loadAll(){
     sb.from('other_expenses').select('*').order('date', {ascending:false}),
     sb.from('entries').select('*').order('date', {ascending:false}).limit(400),
     sb.from('deliveries').select('*, entries(price,date)'),
-    sb.from('payments').select('*, entries(date)'),
+    sb.from('payments').select('*, entries(date)').order('created_at', {ascending:false}),
   ]);
   state.companies = companies.data || [];
   state.prices = prices.data || [];
@@ -233,9 +248,9 @@ function companyTotals(){
 // SHELL / TABS
 // ============================================================
 function tabsForRole(role){
-  if(role === 'operator') return [['entry','Kunlik hisobot']];
-  if(role === 'direktor') return [['overview','Umumiy'],['reports','Hisobotlar'],['companies','Kompaniyalar'],['expenses','Xarajatlar']];
-  return [['entry','Kunlik hisobot'],['overview','Umumiy'],['reports','Hisobotlar'],['companies','Kompaniyalar'],['expenses','Xarajatlar'],['settings','Sozlamalar']];
+  if(role === 'operator') return [['entry','Кунлик ҳисобот']];
+  if(role === 'direktor') return [['overview','Умумий'],['reports','Ҳисоботлар'],['companies','Компаниялар'],['expenses','Харажатлар']];
+  return [['entry','Кунлик ҳисобот'],['overview','Умумий'],['reports','Ҳисоботлар'],['companies','Компаниялар'],['expenses','Харажатлар'],['settings','Созламалар']];
 }
 
 function renderShell(){
@@ -244,8 +259,8 @@ function renderShell(){
   if(!activeTab || !tabs.find(t=>t[0]===activeTab)) activeTab = tabs[0][0];
   document.getElementById('app').innerHTML = `
     <div class="topbar">
-      <div><h1 style="margin-bottom:0">Mangit Metan</h1><p class="who">${esc(state.profile.full_name)} — ${roleLabel(role)}</p></div>
-      <button class="btn secondary small" onclick="doLogout()">Chiqish</button>
+      <div><h1 style="margin-bottom:0">Мангит Метан</h1><p class="who">${esc(state.profile.full_name)} — ${roleLabel(role)}</p></div>
+      <button class="btn secondary small" onclick="doLogout()">Чиқиш</button>
     </div>
     <div class="tabs" id="tabsRow"></div>
     <div id="tabBody"></div>`;
@@ -253,7 +268,7 @@ function renderShell(){
     `<button class="tab-btn ${id===activeTab?'active':''}" onclick="switchTab('${id}')">${label}</button>`).join('');
   renderTab();
 }
-function roleLabel(r){ return r==='ceo'?'CEO':(r==='direktor'?'Direktor':'Operator'); }
+function roleLabel(r){ return r==='ceo'?'CEO':(r==='direktor'?'Директор':'Оператор'); }
 function switchTab(id){ activeTab = id; renderShell(); }
 
 function renderTab(){
@@ -275,6 +290,13 @@ function afterRenderTab(){
   if(activeTab==='reports'){
     document.getElementById('rep_date').addEventListener('change', renderReportDetail);
   }
+  if(activeTab==='companies'){
+    afterRenderCompanies();
+  }
+  if(activeTab==='overview'){
+    renderPL();
+    document.getElementById('pl_month').addEventListener('change', renderPL);
+  }
 }
 
 // ============================================================
@@ -283,55 +305,46 @@ function afterRenderTab(){
 function tplEntry(){
   return `
   <div class="card">
-    <div class="section-title"><h2>Bugungi hisobot</h2></div>
+    <div class="section-title"><h2>Бугунги ҳисобот</h2></div>
     <div class="row">
-      <div class="field"><label>Sana</label><input type="date" id="f_date"></div>
-      <div class="field"><label>Operator ismi</label><input type="text" id="f_operator" placeholder="Jahongir / Sardor"></div>
+      <div class="field"><label>Сана</label><input type="date" id="f_date"></div>
+      <div class="field"><label>Оператор исми</label><input type="text" id="f_operator" placeholder="Жаҳонгир / Сардор"></div>
     </div>
   </div>
   <div class="card">
-    <h2>Pompalar — hozirgi ko'rsatkich (m3)</h2>
-    <p class="hint">Oldingi ko'rsatkich qavs ichida — shundan katta raqam kiriting.</p>
+    <h2>Помпалар — ҳозирги кўрсаткич (m3)</h2>
+    <p class="hint">Олдинги кўрсаткич қавс ичида — шундан катта рақам киритинг.</p>
     <div class="row" id="pumpFields"></div>
   </div>
   <div class="card">
-    <h2>Hisoblagichdan o'tgan gaz — Агрес (m3)</h2>
+    <h2>Ҳисоблагичдан ўтган газ — Агрес (m3)</h2>
     <div class="field"><input type="number" id="f_agres" step="1" placeholder="m3"></div>
   </div>
   <div class="card">
-    <h2>To'lov turlari (so'm)</h2>
+    <h2>Тўлов турлари (сўм)</h2>
     <div class="row">
       <div class="field"><label>UZCARD</label><input type="number" id="f_uzcard" step="1" value="0"></div>
       <div class="field"><label>HUMO</label><input type="number" id="f_humo" step="1" value="0"></div>
-      <div class="field"><label>QR to'lov</label><input type="number" id="f_qr" step="1" value="0"></div>
+      <div class="field"><label>QR тўлов</label><input type="number" id="f_qr" step="1" value="0"></div>
     </div>
     <div class="tile-row" style="margin-top:6px">
-      <div class="tile"><div class="label">Sotilgan m3</div><div class="value" id="calcSoldM3">—</div></div>
-      <div class="tile"><div class="label">Sotuv summasi</div><div class="value" id="calcSalesValue">—</div></div>
-      <div class="tile"><div class="label">Naqt (avtomatik)</div><div class="value good" id="calcNaqt">—</div></div>
+      <div class="tile"><div class="label">Сотилган m3</div><div class="value" id="calcSoldM3">—</div></div>
+      <div class="tile"><div class="label">Сотув суммаси</div><div class="value" id="calcSalesValue">—</div></div>
+      <div class="tile"><div class="label">Нақт (автоматик)</div><div class="value good" id="calcNaqt">—</div></div>
     </div>
-    <p class="hint">Naqt = Sotuv summasi − UZCARD − HUMO − QR.</p>
+    <p class="hint">Нақт = Сотув суммаси − UZCARD − HUMO − QR.</p>
   </div>
   <div class="card">
-    <div class="section-title"><h2>Kompaniyalarga berilgan gaz</h2></div>
+    <div class="section-title"><h2>Компанияларга берилган газ</h2></div>
     <div id="deliveryList"></div>
     <div class="row" style="margin-top:8px">
       <div class="field" style="flex:2"><select id="delCompany"></select></div>
       <div class="field"><input type="number" id="delM3" placeholder="m3" step="0.01"></div>
-      <div class="field" style="flex:0 0 auto"><button class="btn secondary small" onclick="addDelivery()">+ Qo'shish</button></div>
+      <div class="field" style="flex:0 0 auto"><button class="btn secondary small" onclick="addDelivery()">+ Қўшиш</button></div>
     </div>
   </div>
-  <div class="card">
-    <div class="section-title"><h2>Kompaniyadan kelgan to'lov</h2></div>
-    <div id="paymentList"></div>
-    <div class="row" style="margin-top:8px">
-      <div class="field" style="flex:2"><select id="payCompany"></select></div>
-      <div class="field"><input type="number" id="payAmount" placeholder="so'm" step="1"></div>
-      <div class="field" style="flex:0 0 auto"><button class="btn secondary small" onclick="addPayment()">+ Qo'shish</button></div>
-    </div>
-  </div>
-  <div class="card"><h2>Izoh</h2><textarea id="f_izoh" placeholder="Ixtiyoriy izoh..."></textarea></div>
-  <button class="btn" id="submitBtn" style="width:100%;padding:14px" onclick="submitEntry()">Yuborish</button>`;
+  <div class="card"><h2>Изоҳ</h2><textarea id="f_izoh" placeholder="Ихтиёрий изоҳ..."></textarea></div>
+  <button class="btn" id="submitBtn" style="width:100%;padding:14px" onclick="openReview()">Текшириш ва юбориш</button>`;
 }
 
 function recalcPreview(){
@@ -350,9 +363,9 @@ function recalcPreview(){
   const qr = parseFloat(document.getElementById('f_qr').value)||0;
   const naqt = ok ? (salesValue - uzcard - humo - qr) : NaN;
   document.getElementById('calcSoldM3').textContent = ok ? fmt(soldM3)+' m3' : '—';
-  document.getElementById('calcSalesValue').textContent = ok ? fmt(salesValue)+" so'm" : '—';
+  document.getElementById('calcSalesValue').textContent = ok ? fmt(salesValue)+" сўм" : '—';
   const naqtEl = document.getElementById('calcNaqt');
-  naqtEl.textContent = ok ? fmt(naqt)+" so'm" : '—';
+  naqtEl.textContent = ok ? fmt(naqt)+" сўм" : '—';
   naqtEl.className = 'value ' + (naqt < 0 ? 'bad' : 'good');
   return {soldM3, salesValue, naqt, uzcard, humo, qr, price, ok};
 }
@@ -360,60 +373,134 @@ function buildPumpFields(){
   const wrap = document.getElementById('pumpFields');
   const baseline = pumpBaseline();
   wrap.innerHTML = PUMP_NAMES.map((name,i)=>
-    `<div class="field"><label>${name} (oldingi: ${fmt(baseline[i])})</label>
-      <input type="number" id="pump_${i}" step="0.01" placeholder="hozirgi ko'rsatkich"></div>`).join('');
+    `<div class="field"><label>${name} (олдинги: ${fmt(baseline[i])})</label>
+      <input type="number" id="pump_${i}" step="0.01" placeholder="ҳозирги кўрсаткич"></div>`).join('');
   wrap.querySelectorAll('input').forEach(inp => inp.addEventListener('input', recalcPreview));
 }
 function buildCompanySelects(){
   const opts = state.companies.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
   document.getElementById('delCompany').innerHTML = opts;
-  document.getElementById('payCompany').innerHTML = opts;
 }
 function addDelivery(){
   const sel = document.getElementById('delCompany');
   const m3 = parseFloat(document.getElementById('delM3').value);
-  if(!sel.value || !m3){ toast("Kompaniya va m3 kiriting"); return; }
+  if(!sel.value || !m3){ toast("Компания ва m3 киритинг"); return; }
   pending.deliveries.push({company_id: sel.value, companyName: sel.options[sel.selectedIndex].text, m3});
   document.getElementById('delM3').value = '';
-  renderPendingLists();
-}
-function addPayment(){
-  const sel = document.getElementById('payCompany');
-  const amt = parseFloat(document.getElementById('payAmount').value);
-  if(!sel.value || !amt){ toast("Kompaniya va summa kiriting"); return; }
-  pending.payments.push({company_id: sel.value, companyName: sel.options[sel.selectedIndex].text, amount: amt});
-  document.getElementById('payAmount').value = '';
   renderPendingLists();
 }
 function renderPendingLists(){
   document.getElementById('deliveryList').innerHTML = pending.deliveries.map((d,i)=>
     `<div class="list-item">${esc(d.companyName)} — ${fmt(d.m3)} m3 <button class="del" onclick="pending.deliveries.splice(${i},1);renderPendingLists()">✕</button></div>`
-  ).join('') || '<p class="empty">Hali qo&#39;shilmagan</p>';
-  document.getElementById('paymentList').innerHTML = pending.payments.map((p,i)=>
-    `<div class="list-item">${esc(p.companyName)} — ${fmt(p.amount)} so'm <button class="del" onclick="pending.payments.splice(${i},1);renderPendingLists()">✕</button></div>`
-  ).join('') || '<p class="empty">Hali qo&#39;shilmagan</p>';
+  ).join('') || '<p class="empty">Ҳали қўшилмаган</p>';
 }
 
-async function submitEntry(){
+// Gathers + validates the current form. Returns null (and toasts the
+// problem) if something required is missing; otherwise returns everything
+// needed both to render the review screen and to actually submit.
+function collectEntryForm(){
   const date = document.getElementById('f_date').value;
   const operator = document.getElementById('f_operator').value.trim();
-  if(!date || !operator){ toast("Sana va operator ismini kiriting"); return; }
+  if(!date || !operator){ toast("Сана ва оператор исмини киритинг"); return null; }
   const calc = recalcPreview();
-  if(!calc.ok){ toast("Barcha pompa ko'rsatkichlarini kiriting"); return; }
+  if(!calc.ok){ toast("Барча помпа кўрсаткичларини киритинг"); return null; }
   const agres = parseFloat(document.getElementById('f_agres').value);
-  if(isNaN(agres)){ toast("Агрес ko'rsatkichini kiriting"); return; }
+  if(isNaN(agres)){ toast("Агрес кўрсаткичини киритинг"); return null; }
+  const baseline = pumpBaseline();
   const pumpEnd = PUMP_NAMES.map((_,i)=>parseFloat(document.getElementById('pump_'+i).value));
+  const izoh = document.getElementById('f_izoh').value.trim() || null;
+  return { date, operator, calc, agres, pumpEnd, baseline, izoh };
+}
 
-  const btn = document.getElementById('submitBtn');
-  btn.disabled = true; btn.textContent = 'Yuborilmoqda…';
+// Step 1: operator hits "Текшириш ва юбориш" -> validate, then show a
+// read-only summary of everything that's about to be saved. Nothing is
+// written to the database yet. Operator must tick the confirm box before
+// the real submit button becomes clickable, and can still go back and
+// edit any field first.
+function openReview(){
+  const f = collectEntryForm();
+  if(!f) return;
+
+  const pumpRows = PUMP_NAMES.map((name,i)=>
+    `<div class="review-row"><span class="k">${name}</span><span>${fmt(f.baseline[i])} → <b>${fmt(f.pumpEnd[i])}</b> (${fmt(f.pumpEnd[i]-f.baseline[i])} m3)</span></div>`
+  ).join('');
+
+  const delRows = pending.deliveries.length
+    ? pending.deliveries.map(d=>`<div class="review-row"><span class="k">${esc(d.companyName)}</span><span>${fmt(d.m3)} m3</span></div>`).join('')
+    : `<div class="review-row"><span class="k">—</span><span>Йўқ</span></div>`;
+
+  const gapWarn = Math.abs(f.calc.soldM3 - f.agres) > 300
+    ? `<div class="review-warn">⚠ Диққат: сотилган m3 (${fmt(f.calc.soldM3)}) билан Агрес (${fmt(f.agres)}) кўрсаткичи орасида катта фарқ бор. Помпа рақамларини яна бир текшириб кўринг.</div>` : '';
+
+  const html = `
+  <div class="overlay" id="reviewOverlay">
+    <div class="review-box">
+      <h2>Юборишдан олдин текширинг</h2>
+      <p class="hint">Ҳамма рақамни диққат билан ўқиб чиқинг. Юборилгандан кейин фақат CEO тузата олади — шунинг учун хато бўлса ҳозир орқага қайтиб тузатинг.</p>
+
+      <div class="review-section">
+        <h3>Умумий</h3>
+        <div class="review-row"><span class="k">Сана</span><span><b>${f.date}</b></span></div>
+        <div class="review-row"><span class="k">Оператор</span><span><b>${esc(f.operator)}</b></span></div>
+      </div>
+
+      <div class="review-section">
+        <h3>Помпалар (олдинги → ҳозирги)</h3>
+        ${pumpRows}
+        <div class="review-row" style="margin-top:4px;border-top:1px solid var(--border);padding-top:6px"><span class="k">Жами сотилган</span><span><b>${fmt(f.calc.soldM3)} m3</b></span></div>
+        <div class="review-row"><span class="k">Агрес кўрсаткичи</span><span><b>${fmt(f.agres)} m3</b></span></div>
+      </div>
+
+      <div class="review-section">
+        <h3>Тўловлар</h3>
+        <div class="review-row"><span class="k">Сотув суммаси</span><span><b>${fmt(f.calc.salesValue)} сўм</b></span></div>
+        <div class="review-row"><span class="k">UZCARD</span><span>${fmt(f.calc.uzcard)} сўм</span></div>
+        <div class="review-row"><span class="k">HUMO</span><span>${fmt(f.calc.humo)} сўм</span></div>
+        <div class="review-row"><span class="k">QR</span><span>${fmt(f.calc.qr)} сўм</span></div>
+        <div class="review-row"><span class="k">Нақт (автоматик)</span><span><b>${fmt(f.calc.naqt)} сўм</b></span></div>
+      </div>
+
+      <div class="review-section">
+        <h3>Компанияларга берилган газ</h3>
+        ${delRows}
+      </div>
+
+      ${f.izoh ? `<div class="review-section"><h3>Изоҳ</h3><p style="font-size:.9rem">${esc(f.izoh)}</p></div>` : ''}
+
+      ${gapWarn}
+
+      <label style="display:flex;gap:6px;align-items:center;margin:16px 0 10px"><input type="checkbox" id="review_confirm" style="width:auto" onchange="document.getElementById('reviewSubmitBtn').disabled=!this.checked"> Юқоридаги маълумотларнинг ҳаммасини текширдим, тўғри деб тасдиқлайман</label>
+
+      <div class="row">
+        <button class="btn secondary" style="flex:1" onclick="closeReview()">← Ортга (таҳрирлаш)</button>
+        <button class="btn" id="reviewSubmitBtn" style="flex:1" disabled onclick="doSubmitEntry()">Тасдиқлаш ва юбориш</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function closeReview(){
+  const el = document.getElementById('reviewOverlay');
+  if(el) el.remove();
+}
+
+// Step 2: only runs after the operator ticked the confirm box on the
+// review screen. This is the actual database write.
+async function doSubmitEntry(){
+  const f = collectEntryForm();
+  if(!f){ closeReview(); return; }
+
+  const btn = document.getElementById('reviewSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Юборилмоқда…';
   try{
     const { data: entryRow, error } = await sb.from('entries').insert({
-      date, operator_id: state.profile.id, operator_name: operator,
-      pump_end: pumpEnd, agres,
-      uzcard: calc.uzcard, humo: calc.humo, qr: calc.qr,
-      sold_m3: calc.soldM3, sales_value: calc.salesValue, naqt: calc.naqt,
-      price: calc.price.sale_price,
-      izoh: document.getElementById('f_izoh').value.trim() || null
+      date: f.date, operator_id: state.profile.id, operator_name: f.operator,
+      pump_end: f.pumpEnd, agres: f.agres,
+      uzcard: f.calc.uzcard, humo: f.calc.humo, qr: f.calc.qr,
+      sold_m3: f.calc.soldM3, sales_value: f.calc.salesValue, naqt: f.calc.naqt,
+      price: f.calc.price.sale_price,
+      izoh: f.izoh
     }).select().single();
     if(error) throw error;
 
@@ -422,72 +509,95 @@ async function submitEntry(){
       const { error: e2 } = await sb.from('deliveries').insert(rows);
       if(e2) throw e2;
     }
-    if(pending.payments.length){
-      const rows = pending.payments.map(p=>({entry_id: entryRow.id, company_id: p.company_id, amount: p.amount}));
-      const { error: e3 } = await sb.from('payments').insert(rows);
-      if(e3) throw e3;
-    }
 
-    toast("Hisobot yuborildi ✓");
-    pending = {deliveries:[], payments:[]};
+    closeReview();
+    toast("Ҳисобот юборилди ✓");
+    pending = {deliveries:[]};
     await loadAll();
     renderTab();
   }catch(e){
-    toast("Xatolik: " + (e.message || 'saqlanmadi'));
-  }finally{
-    btn.disabled = false; btn.textContent = 'Yuborish';
+    toast("Хатолик: " + (e.message || 'сақланмади'));
+    btn.disabled = false; btn.textContent = 'Тасдиқлаш ва юбориш';
   }
 }
 
 // ============================================================
 // OVERVIEW — grouped dashboard (direktor + ceo)
 // ============================================================
+function currentMonthKey(){ return todayISO().slice(0,7); }
+
+// Full monthly profit & loss for one calendar month (yyyy-mm).
+// Every line is shown separately in renderPL() so the CEO/Direktor can
+// verify each number against the source data - this is an ESTIMATE built
+// from the entered rates, not a substitute for the accountant's own
+// bookkeeping (NDS/tax math in particular is simplified).
+function computeMonthlyPL(monthStr){
+  const monthEntries = state.entries.filter(e=> e.date && e.date.slice(0,7)===monthStr);
+  let revenue=0, cogs=0, excise=0;
+  monthEntries.forEach(e=>{
+    const soldM3 = Number(e.sold_m3)||0;
+    revenue += Number(e.sales_value)||0;
+    const pr = priceFor(e.date);
+    cogs += soldM3 * pr.cost_price;
+    excise += soldM3 * pr.excise;
+  });
+  const grossProfit = revenue - cogs - excise;
+  const fc = fixedCostFor(monthStr+'-01');
+  const fixedTotal = (Number(fc.salary)||0)+(Number(fc.bank_loan_interest)||0)+(Number(fc.land_property_tax)||0);
+  const otherExp = state.otherExpenses.filter(e=>e.date && e.date.slice(0,7)===monthStr).reduce((s,e)=>s+Number(e.amount||0),0);
+  const prepayGaz = state.prepayments.filter(p=>p.month && p.month.slice(0,7)===monthStr && p.kind==='gaz').reduce((s,p)=>s+Number(p.amount||0),0);
+  const prepayTok = state.prepayments.filter(p=>p.month && p.month.slice(0,7)===monthStr && p.kind==='tok').reduce((s,p)=>s+Number(p.amount||0),0);
+  const preTax = grossProfit - fixedTotal - otherExp;
+  const tax = taxFor(monthStr+'-01');
+  const ndsRate = Number(tax.nds_rate)||0;
+  const ndsAmount = revenue * (ndsRate/(1+ndsRate));
+  const socialAmount = (Number(fc.salary)||0) * (Number(tax.social_tax_rate)||0);
+  const profitTaxBase = Math.max(preTax - ndsAmount, 0);
+  const profitTaxAmount = profitTaxBase * (Number(tax.profit_tax_rate)||0);
+  const netProfit = preTax - ndsAmount - socialAmount - profitTaxAmount;
+  return { count: monthEntries.length, revenue, cogs, excise, grossProfit, fc, fixedTotal, otherExp, prepayGaz, prepayTok, preTax, tax, ndsAmount, socialAmount, profitTaxAmount, netProfit };
+}
+
+function renderPL(){
+  const monthStr = document.getElementById('pl_month').value || currentMonthKey();
+  const pl = computeMonthlyPL(monthStr);
+  const box = document.getElementById('plDetail');
+  const row = (label, value, opts={}) => `<div class="pl-row${opts.bold?' pl-bold':''}${opts.indent?' pl-indent':''}"><span>${label}</span><span class="${opts.cls||''}">${value}</span></div>`;
+  box.innerHTML = `
+    <p class="hint" style="margin-bottom:10px">${pl.count} та кунлик ҳисобот асосида ҳисобланди. Рақамлар СОЗЛАМАЛАРдаги нарх/солиқ ставкаларига асосан тахминий ҳисобланади — аниқ солиқ ҳисоб-китоби учун бухгалтер билан текшириб олинг.</p>
+    ${row('Сотув суммаси (жами)', fmt(pl.revenue)+" сўм")}
+    ${row('− Таннарх харажати (газ)', fmt(pl.cogs)+" сўм", {indent:true})}
+    ${row('− Акциз', fmt(pl.excise)+" сўм", {indent:true})}
+    ${row('= Ялпи фойда', fmt(pl.grossProfit)+" сўм", {bold:true})}
+    ${row('− Иш ҳақи', fmt(pl.fc.salary)+" сўм", {indent:true})}
+    ${row('− Банк кредити', fmt(pl.fc.bank_loan_interest)+" сўм", {indent:true})}
+    ${row('− Ер-мулк солиғи', fmt(pl.fc.land_property_tax)+" сўм", {indent:true})}
+    ${row('− Бошқа харажатлар', fmt(pl.otherExp)+" сўм", {indent:true})}
+    ${row('= Солиққача фойда', fmt(pl.preTax)+" сўм", {bold:true})}
+    ${row('− НДС ('+pct(pl.tax.nds_rate)+')', fmt(pl.ndsAmount)+" сўм", {indent:true})}
+    ${row('− Ижтимоий солиқ ('+pct(pl.tax.social_tax_rate)+')', fmt(pl.socialAmount)+" сўм", {indent:true})}
+    ${row('− Фойда солиғи ('+pct(pl.tax.profit_tax_rate)+')', fmt(pl.profitTaxAmount)+" сўм", {indent:true})}
+    ${row('= СОФ ФОЙДА', fmt(pl.netProfit)+" сўм", {bold:true, cls: pl.netProfit<0?'bad-text':'good-text'})}
+    <div class="hint" style="margin-top:10px">Препеймент (шу ой): Газ — ${fmt(pl.prepayGaz)} сўм, Ток — ${fmt(pl.prepayTok)} сўм (буларни "Харажатлар" бўлимида кўрасиз, тепадаги ҳисобга алоҳида — газ таннархи ичида ҳисобга олинган деб тахмин қилинади).</div>`;
+}
+
 function tplOverview(){
   const last = state.entries[0];
   const last30 = state.entries.slice(0,30);
-  const revenue30 = last30.reduce((s,e)=>s+(Number(e.sales_value)||0),0);
   const naqt30 = last30.reduce((s,e)=>s+(Number(e.naqt)||0),0);
   const gap = last ? (Number(last.sold_m3) - Number(last.agres)) : null;
-  const prepayThisYear = state.prepayments.reduce((s,p)=>s+Number(p.amount||0),0);
-  const otherExpThisMonth = state.otherExpenses.filter(e=>e.date && e.date.slice(0,7)===todayISO().slice(0,7)).reduce((s,e)=>s+Number(e.amount||0),0);
-  const fc = fixedCostFor(todayISO());
-  const tax = taxFor(todayISO());
 
   return `
   <div class="tile-row">
-    <div class="tile"><div class="label">Kiritilgan kunlar</div><div class="value">${state.entries.length}</div></div>
-    <div class="tile"><div class="label">So'nggi 30 kun daromadi</div><div class="value">${fmt(revenue30)}</div></div>
-    <div class="tile"><div class="label">So'nggi 30 kun Naqt</div><div class="value">${fmt(naqt30)}</div></div>
-    <div class="tile"><div class="label">Oxirgi kun Агрес farqi</div><div class="value ${gap!==null&&Math.abs(gap)>300?'bad':'good'}">${gap!==null?fmt(gap)+' m3':'—'}</div></div>
+    <div class="tile"><div class="label">Киритилган кунлар</div><div class="value">${state.entries.length}</div></div>
+    <div class="tile"><div class="label">Сўнгги 30 кун Нақт</div><div class="value">${fmt(naqt30)}</div></div>
+    <div class="tile"><div class="label">Охирги кун Агрес фарқи</div><div class="value ${gap!==null&&Math.abs(gap)>300?'bad':'good'}">${gap!==null?fmt(gap)+' m3':'—'}</div></div>
+    <div class="tile"><div class="label">Жорий сотув нархи</div><div class="value">${fmt(priceFor(todayISO()).sale_price)} сўм/m3</div></div>
   </div>
 
   <div class="card group-income">
-    <h3>Daromad</h3>
-    <div class="row">
-      <div class="tile"><div class="label">Joriy sotuv narxi</div><div class="value">${fmt(priceFor(todayISO()).sale_price)} so'm/m3</div></div>
-      <div class="tile"><div class="label">Таннарх</div><div class="value">${fmt(priceFor(todayISO()).cost_price)} so'm/m3</div></div>
-      <div class="tile"><div class="label">Акциз</div><div class="value">${fmt(priceFor(todayISO()).excise)} so'm/m3</div></div>
-    </div>
-  </div>
-
-  <div class="card group-expense">
-    <h3>Xarajatlar (joriy oy)</h3>
-    <div class="row">
-      <div class="tile"><div class="label">Prepayment (jami)</div><div class="value">${fmt(prepayThisYear)}</div></div>
-      <div class="tile"><div class="label">Boshqa harajatlar</div><div class="value">${fmt(otherExpThisMonth)}</div></div>
-      <div class="tile"><div class="label">Ish haqi</div><div class="value">${fmt(fc.salary)}</div></div>
-      <div class="tile"><div class="label">Bank krediti</div><div class="value">${fmt(fc.bank_loan_interest)}</div></div>
-      <div class="tile"><div class="label">Yer-mulk solig'i</div><div class="value">${fmt(fc.land_property_tax)}</div></div>
-    </div>
-  </div>
-
-  <div class="card group-tax">
-    <h3>Soliq stavkalari (joriy)</h3>
-    <div class="row">
-      <div class="tile"><div class="label">NDS</div><div class="value">${pct(tax.nds_rate)}</div></div>
-      <div class="tile"><div class="label">Ijtimoiy soliq</div><div class="value">${pct(tax.social_tax_rate)}</div></div>
-      <div class="tile"><div class="label">Foyda solig'i</div><div class="value">${pct(tax.profit_tax_rate)}</div></div>
-    </div>
+    <div class="section-title"><h2>Ойлик даромад ҳисоботи</h2><input type="month" id="pl_month" value="${currentMonthKey()}" style="width:auto"></div>
+    <div id="plDetail"></div>
   </div>`;
 }
 
@@ -498,21 +608,21 @@ function tplReports(){
   const rows = state.entries.slice(0,30);
   return `
   <div class="card">
-    <h2>Sana bo'yicha qidirish</h2>
-    <p class="hint">Istalgan o'tgan kunni tanlang — o'sha kundagi barcha ma'lumotlar (pompalar, to'lovlar, yetkazib berish, izoh) to'liq chiqadi.</p>
+    <h2>Сана бўйича қидириш</h2>
+    <p class="hint">Исталган ўтган кунни танланг — ўша кундаги барча маълумотлар (помпалар, тўловлар, етказиб бериш, изоҳ) тўлиқ чиқади.</p>
     <div class="field"><input type="date" id="rep_date" max="${todayISO()}"></div>
     <div id="repDetail"></div>
   </div>
   <div class="card">
-    <h2>So'nggi kunlar</h2>
+    <h2>Сўнгги кунлар</h2>
     <div class="table-wrap">
-      <table><thead><tr><th>Sana</th><th>Operator</th><th>Sotilgan m3</th><th>Sotuv summasi</th><th>Naqt</th><th>Агрес farqi</th></tr></thead>
+      <table><thead><tr><th>Сана</th><th>Оператор</th><th>Сотилган m3</th><th>Сотув суммаси</th><th>Нақт</th><th>Агрес фарқи</th></tr></thead>
       <tbody>${rows.map(e=>{
         const gap = Number(e.sold_m3)-Number(e.agres);
         return `<tr style="cursor:pointer" onclick="document.getElementById('rep_date').value='${e.date}';renderReportDetail()">
           <td>${e.date}</td><td>${esc(e.operator_name)}</td><td>${fmt(e.sold_m3)}</td><td>${fmt(e.sales_value)}</td><td>${fmt(e.naqt)}</td>
           <td><span class="pill ${Math.abs(gap)>300?'bad':'good'}">${fmt(gap)} m3</span></td></tr>`;
-      }).join('') || '<tr><td colspan="6" class="empty">Hali hisobot yo&#39;q</td></tr>'}</tbody></table>
+      }).join('') || '<tr><td colspan="6" class="empty">Ҳали ҳисобот йўқ</td></tr>'}</tbody></table>
     </div>
   </div>`;
 }
@@ -521,63 +631,154 @@ function renderReportDetail(){
   const box = document.getElementById('repDetail');
   if(!date){ box.innerHTML=''; return; }
   const e = state.entries.find(x=>x.date===date);
-  if(!e){ box.innerHTML = `<p class="detail-box">Bu sanada hisobot topilmadi.</p>`; return; }
+  if(!e){ box.innerHTML = `<p class="detail-box">Бу санада ҳисобот топилмади.</p>`; return; }
   const dels = state.deliveries.filter(d=>d.entry_id===e.id);
   const pays = state.payments.filter(p=>p.entry_id===e.id);
   const compName = id => (state.companies.find(c=>c.id===id)||{}).name || '—';
+  const canEdit = state.profile.role === 'ceo';
   box.innerHTML = `<div class="detail-box">
-    <div><b>${e.date}</b> — Operator: ${esc(e.operator_name)}</div>
-    <div>Pompalar: ${(e.pump_end||[]).map((v,i)=>PUMP_NAMES[i]+': '+fmt(v)).join(' · ')}</div>
-    <div>Агрес: ${fmt(e.agres)} m3 &nbsp; | &nbsp; Sotilgan: ${fmt(e.sold_m3)} m3 &nbsp; | &nbsp; Farq: ${fmt(e.sold_m3-e.agres)} m3</div>
-    <div>Sotuv summasi: ${fmt(e.sales_value)} so'm (narx: ${fmt(e.price)}/m3)</div>
-    <div>UZCARD: ${fmt(e.uzcard)} · HUMO: ${fmt(e.humo)} · QR: ${fmt(e.qr)} · Naqt: ${fmt(e.naqt)}</div>
-    ${dels.length? '<div>Berilgan gaz: '+dels.map(d=>compName(d.company_id)+' — '+fmt(d.m3)+' m3').join(', ')+'</div>':''}
-    ${pays.length? '<div>Kelgan to&#39;lov: '+pays.map(p=>compName(p.company_id)+' — '+fmt(p.amount)+" so'm").join(', ')+'</div>':''}
-    ${e.izoh? '<div>Izoh: '+esc(e.izoh)+'</div>':''}
+    <div><b>${e.date}</b> — Оператор: ${esc(e.operator_name)}</div>
+    <div>Помпалар: ${(e.pump_end||[]).map((v,i)=>PUMP_NAMES[i]+': '+fmt(v)).join(' · ')}</div>
+    <div>Агрес: ${fmt(e.agres)} m3 &nbsp; | &nbsp; Сотилган: ${fmt(e.sold_m3)} m3 &nbsp; | &nbsp; Фарқ: ${fmt(e.sold_m3-e.agres)} m3</div>
+    <div>Сотув суммаси: ${fmt(e.sales_value)} сўм (нарх: ${fmt(e.price)}/m3)</div>
+    <div>UZCARD: ${fmt(e.uzcard)} · HUMO: ${fmt(e.humo)} · QR: ${fmt(e.qr)} · Нақт: ${fmt(e.naqt)}</div>
+    ${dels.length? '<div>Берилган газ: '+dels.map(d=>compName(d.company_id)+' — '+fmt(d.m3)+' m3').join(', ')+'</div>':''}
+    ${pays.length? '<div>Келган тўлов: '+pays.map(p=>compName(p.company_id)+' — '+fmt(p.amount)+" сўм").join(', ')+'</div>':''}
+    ${e.izoh? '<div>Изоҳ: '+esc(e.izoh)+'</div>':''}
+    ${canEdit? `<button class="btn danger small" style="margin-top:8px" onclick="deleteEntry('${e.id}')">Бу ҳисоботни ўчириш</button>`:''}
   </div>`;
+}
+async function deleteEntry(id){
+  if(!confirm("Бу кунлик ҳисоботни бутунлай ўчирасизми? (унга боғлиқ етказиб бериш/тўловлар ҳам ўчади)")) return;
+  const { error } = await sb.from('entries').delete().eq('id', id);
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Ўчирилди ✓");
+  await loadAll();
+  document.getElementById('rep_date').value = '';
+  renderTab();
 }
 
 // ============================================================
 // COMPANIES
 // ============================================================
+// Balance tiers — the further below zero, the more urgent the reminder
+// to contact the company about topping up. Thresholds per CEO's request:
+// < 200k = red (urgent), < 500k = orange, < 1.5mln = yellow (watch),
+// >= 1.5mln = green (fine). A negative balance (company owes money) is
+// always red regardless of these thresholds.
+function balanceTier(bal){
+  if(bal < 200000) return 'bad';
+  if(bal < 500000) return 'orange';
+  if(bal < 1500000) return 'warn';
+  return 'good';
+}
+function balanceLabel(bal){
+  if(bal < 0) return 'Қарздор!';
+  if(bal < 200000) return 'Жуда кам қолди';
+  if(bal < 500000) return 'Кам қолмоқда';
+  if(bal < 1500000) return 'Кузатиб туринг';
+  return 'Яхши';
+}
+
 function tplCompanies(role){
   const totals = companyTotals().sort((a,b)=>a.name.localeCompare(b.name));
   const canEdit = role==='ceo';
+  const recentPayments = state.payments
+    .filter(p=>!p.entry_id)
+    .slice().sort((a,b)=> new Date(b.created_at) - new Date(a.created_at))
+    .slice(0,15);
+  const companyName = id => (state.companies.find(c=>c.id===id)||{}).name || '—';
+
   return `
   <div class="card group-company">
-    <div class="section-title"><h2>Kompaniyalar balansi</h2></div>
+    <div class="section-title"><h2>Компаниялар баланси</h2></div>
+    <p class="hint">Баланс = компания ўтказган пул − унга берилган газ суммаси. Ранг қанча тез боғланиш кераклигини кўрсатади: сариқ — кузатиб туринг, тўқ сариқ — кам қолди, қизил — жуда кам ёки қарздор.</p>
     <div class="table-wrap">
-      <table><thead><tr><th>Kompaniya</th><th>Sotilgan m3</th><th>Sotilgan summa</th><th>To'langan</th><th>Qoldiq balans</th></tr></thead>
+      <table><thead><tr><th>Компания</th><th>Сотилган m3</th><th>Сотилган сумма</th><th>Тўланган</th><th>Қолдиқ баланс</th>${canEdit?'<th></th>':''}</tr></thead>
       <tbody>${totals.map(c=>{
         const bal = c.paid - c.sold;
+        const tier = balanceTier(bal);
         return `<tr><td>${esc(c.name)}</td><td>${fmt(c.m3)}</td><td>${fmt(c.sold)}</td><td>${fmt(c.paid)}</td>
-          <td><span class="pill ${bal<0?'bad':'good'}">${fmt(bal)}</span></td></tr>`;
+          <td><span class="pill ${tier}" title="${balanceLabel(bal)}">${fmt(bal)}</span></td>
+          ${canEdit?`<td><button class="del" onclick="deleteCompany('${c.id}')" title="Ўчириш">✕</button></td>`:''}</tr>`;
       }).join('')}</tbody></table>
     </div>
   </div>
   ${canEdit ? `
-  <div class="card group-settings">
-    <h2>Yangi kompaniya qo'shish</h2>
+  <div class="card group-income">
+    <div class="section-title"><h2>Компания балансига пул қўшиш</h2></div>
+    <p class="hint">Компания ҳисобингизга пул ўтказганда шу ерга киритинг — баланси ошади. Кейин уларга газ берилган сари баланс ўзи камайиб боради (юқоридаги жадвалда автоматик ҳисобланади).</p>
     <div class="row">
-      <div class="field" style="flex:2"><label>Nomi</label><input type="text" id="nc_name"></div>
-      <div class="field"><label>Boshlang'ich m3</label><input type="number" id="nc_m3" value="0"></div>
-      <div class="field"><label>Boshlang'ich sotilgan summa</label><input type="number" id="nc_sold" value="0"></div>
-      <div class="field"><label>Boshlang'ich to'langan</label><input type="number" id="nc_paid" value="0"></div>
-      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addCompany()">Qo'shish</button></div>
+      <div class="field" style="flex:2"><label>Компания</label><select id="cp_company"></select></div>
+      <div class="field"><label>Сумма (сўм)</label><input type="number" id="cp_amount" step="1"></div>
+      <div class="field"><label>Сана</label><input type="date" id="cp_date" value="${todayISO()}"></div>
+      <div class="field" style="flex:2"><label>Изоҳ (ихтиёрий)</label><input type="text" id="cp_note" placeholder="масалан: наличний, ҳисобдан"></div>
+      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addCompanyPayment()">Қўшиш</button></div>
+    </div>
+    <div class="table-wrap" style="margin-top:12px">
+      <table><thead><tr><th>Сана</th><th>Компания</th><th>Сумма</th><th>Изоҳ</th><th></th></tr></thead>
+      <tbody>${recentPayments.map(p=>
+        `<tr><td>${p.date||''}</td><td>${esc(companyName(p.company_id))}</td><td>${fmt(p.amount)}</td><td>${esc(p.note||'')}</td>
+          <td><button class="del" onclick="deleteCompanyPayment('${p.id}')" title="Ўчириш">✕</button></td></tr>`
+      ).join('') || `<tr><td colspan="5" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
+    </div>
+  </div>
+  <div class="card group-settings">
+    <h2>Янги компания қўшиш</h2>
+    <div class="row">
+      <div class="field" style="flex:2"><label>Номи</label><input type="text" id="nc_name"></div>
+      <div class="field"><label>Бошланғич m3</label><input type="number" id="nc_m3" value="0"></div>
+      <div class="field"><label>Бошланғич сотилган сумма</label><input type="number" id="nc_sold" value="0"></div>
+      <div class="field"><label>Бошланғич тўланган</label><input type="number" id="nc_paid" value="0"></div>
+      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addCompany()">Қўшиш</button></div>
     </div>
   </div>` : ''}`;
 }
+function afterRenderCompanies(){
+  const sel = document.getElementById('cp_company');
+  if(sel){
+    sel.innerHTML = state.companies.slice().sort((a,b)=>a.name.localeCompare(b.name))
+      .map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  }
+}
+async function addCompanyPayment(){
+  const companyId = document.getElementById('cp_company').value;
+  const amount = parseFloat(document.getElementById('cp_amount').value);
+  const date = document.getElementById('cp_date').value || todayISO();
+  if(!companyId || !amount){ toast("Компания ва суммани киритинг"); return; }
+  const { error } = await sb.from('payments').insert({
+    company_id: companyId, amount, date,
+    note: document.getElementById('cp_note').value.trim() || null
+  });
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Баланс янгиланди ✓");
+  await loadAll(); renderTab();
+}
+async function deleteCompanyPayment(id){
+  if(!confirm("Бу тўловни ўчирасизми? (компания баланси қайта ҳисобланади)")) return;
+  const { error } = await sb.from('payments').delete().eq('id', id);
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Ўчирилди ✓");
+  await loadAll(); renderTab();
+}
 async function addCompany(){
   const name = document.getElementById('nc_name').value.trim();
-  if(!name){ toast("Nom kiriting"); return; }
+  if(!name){ toast("Ном киритинг"); return; }
   const { error } = await sb.from('companies').insert({
     name,
     seed_m3: parseFloat(document.getElementById('nc_m3').value)||0,
     seed_sold: parseFloat(document.getElementById('nc_sold').value)||0,
     seed_paid: parseFloat(document.getElementById('nc_paid').value)||0
   });
-  if(error){ toast("Xatolik: "+error.message); return; }
-  toast("Kompaniya qo'shildi ✓");
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Компания қўшилди ✓");
+  await loadAll(); renderTab();
+}
+async function deleteCompany(id){
+  if(!confirm("Бу компанияни ўчирасизми? (агар унга боғлиқ етказиб бериш/тўлов ёзувлари бўлса, ўчирилмайди)")) return;
+  const { error } = await sb.from('companies').delete().eq('id', id);
+  if(error){ toast("Хатолик: "+error.message+" (аввал унга боғлиқ ёзувларни ўчиринг)"); return; }
+  toast("Ўчирилди ✓");
   await loadAll(); renderTab();
 }
 
@@ -588,48 +789,62 @@ function tplExpenses(role){
   const canEdit = role==='ceo';
   return `
   <div class="card group-expense">
-    <div class="section-title"><h2>Prepayment (Gaz / Tok)</h2></div>
+    <div class="section-title"><h2>Препеймент (Газ / Ток)</h2></div>
     <div class="table-wrap">
-      <table><thead><tr><th>Oy</th><th>Turi</th><th>Summa</th><th>Izoh</th></tr></thead>
+      <table><thead><tr><th>Ой</th><th>Тури</th><th>Сумма</th><th>Изоҳ</th>${canEdit?'<th></th>':''}</tr></thead>
       <tbody>${state.prepayments.map(p=>
-        `<tr><td>${p.month}</td><td>${p.kind==='gaz'?'Gaz':'Tok'}</td><td>${fmt(p.amount)}</td><td>${esc(p.note||'')}</td></tr>`
-      ).join('') || '<tr><td colspan="4" class="empty">Hali kiritilmagan</td></tr>'}</tbody></table>
+        `<tr><td>${p.month}</td><td>${p.kind==='gaz'?'Газ':'Ток'}</td><td>${fmt(p.amount)}</td><td>${esc(p.note||'')}</td>
+          ${canEdit?`<td><button class="del" onclick="deletePrepayment('${p.id}')">✕</button></td>`:''}</tr>`
+      ).join('') || `<tr><td colspan="${canEdit?5:4}" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
     </div>
     ${canEdit ? `<div class="row" style="margin-top:10px">
-      <div class="field"><label>Oy</label><input type="month" id="pp_month"></div>
-      <div class="field"><label>Turi</label><select id="pp_kind"><option value="gaz">Gaz</option><option value="tok">Tok</option></select></div>
-      <div class="field"><label>Summa</label><input type="number" id="pp_amount"></div>
-      <div class="field"><label>Izoh</label><input type="text" id="pp_note"></div>
-      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addPrepayment()">Qo'shish</button></div>
+      <div class="field"><label>Ой</label><input type="month" id="pp_month"></div>
+      <div class="field"><label>Тури</label><select id="pp_kind"><option value="gaz">Газ</option><option value="tok">Ток</option></select></div>
+      <div class="field"><label>Сумма</label><input type="number" id="pp_amount"></div>
+      <div class="field"><label>Изоҳ</label><input type="text" id="pp_note"></div>
+      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addPrepayment()">Қўшиш</button></div>
     </div>` : ''}
   </div>
 
   <div class="card group-expense">
-    <div class="section-title"><h2>Boshqa harajatlar</h2></div>
+    <div class="section-title"><h2>Бошқа харажатлар</h2></div>
     <div class="table-wrap">
-      <table><thead><tr><th>Sana</th><th>Tavsif</th><th>Summa</th></tr></thead>
+      <table><thead><tr><th>Сана</th><th>Тавсиф</th><th>Сумма</th>${canEdit?'<th></th>':''}</tr></thead>
       <tbody>${state.otherExpenses.map(e=>
-        `<tr><td>${e.date}</td><td>${esc(e.description)}</td><td>${fmt(e.amount)}</td></tr>`
-      ).join('') || '<tr><td colspan="3" class="empty">Hali kiritilmagan</td></tr>'}</tbody></table>
+        `<tr><td>${e.date}</td><td>${esc(e.description)}</td><td>${fmt(e.amount)}</td>
+          ${canEdit?`<td><button class="del" onclick="deleteOtherExpense('${e.id}')">✕</button></td>`:''}</tr>`
+      ).join('') || `<tr><td colspan="${canEdit?4:3}" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
     </div>
     ${canEdit ? `<div class="row" style="margin-top:10px">
-      <div class="field"><label>Sana</label><input type="date" id="oe_date" value="${todayISO()}"></div>
-      <div class="field" style="flex:2"><label>Tavsif</label><input type="text" id="oe_desc"></div>
-      <div class="field"><label>Summa</label><input type="number" id="oe_amount"></div>
-      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addOtherExpense()">Qo'shish</button></div>
+      <div class="field"><label>Сана</label><input type="date" id="oe_date" value="${todayISO()}"></div>
+      <div class="field" style="flex:2"><label>Тавсиф</label><input type="text" id="oe_desc"></div>
+      <div class="field"><label>Сумма</label><input type="number" id="oe_amount"></div>
+      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addOtherExpense()">Қўшиш</button></div>
     </div>` : ''}
   </div>`;
 }
 async function addPrepayment(){
   const monthVal = document.getElementById('pp_month').value; // yyyy-mm
-  if(!monthVal){ toast("Oyni tanlang"); return; }
+  if(!monthVal){ toast("Ойни танланг"); return; }
   const { error } = await sb.from('prepayments').upsert({
     month: monthVal+'-01', kind: document.getElementById('pp_kind').value,
     amount: parseFloat(document.getElementById('pp_amount').value)||0,
     note: document.getElementById('pp_note').value.trim()||null
   }, { onConflict: 'month,kind' });
-  if(error){ toast("Xatolik: "+error.message); return; }
-  toast("Saqlandi ✓"); await loadAll(); renderTab();
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Сақланди ✓"); await loadAll(); renderTab();
+}
+async function deletePrepayment(id){
+  if(!confirm("Ўчирасизми?")) return;
+  const { error } = await sb.from('prepayments').delete().eq('id', id);
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Ўчирилди ✓"); await loadAll(); renderTab();
+}
+async function deleteOtherExpense(id){
+  if(!confirm("Ўчирасизми?")) return;
+  const { error } = await sb.from('other_expenses').delete().eq('id', id);
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Ўчирилди ✓"); await loadAll(); renderTab();
 }
 async function addOtherExpense(){
   const { error } = await sb.from('other_expenses').insert({
@@ -637,8 +852,8 @@ async function addOtherExpense(){
     description: document.getElementById('oe_desc').value.trim(),
     amount: parseFloat(document.getElementById('oe_amount').value)||0
   });
-  if(error){ toast("Xatolik: "+error.message); return; }
-  toast("Saqlandi ✓"); await loadAll(); renderTab();
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Сақланди ✓"); await loadAll(); renderTab();
 }
 
 // ============================================================
@@ -647,79 +862,79 @@ async function addOtherExpense(){
 function tplSettings(){
   return `
   <div class="card group-settings">
-    <div class="section-title"><h2>Narx tarixi (Sotuv / Таннарх / Акциз)</h2></div>
-    <div class="table-wrap"><table><thead><tr><th>Sana (dan)</th><th>Sotuv</th><th>Таннарх</th><th>Акциз</th></tr></thead>
+    <div class="section-title"><h2>Нарх тарихи (Сотув / Таннарх / Акциз)</h2></div>
+    <div class="table-wrap"><table><thead><tr><th>Сана (дан)</th><th>Сотув</th><th>Таннарх</th><th>Акциз</th></tr></thead>
       <tbody>${state.prices.map(p=>`<tr><td>${p.effective_date}</td><td>${fmt(p.sale_price)}</td><td>${fmt(p.cost_price)}</td><td>${fmt(p.excise)}</td></tr>`).join('')}</tbody></table></div>
     <div class="confirm-wrap">
-      <p class="hint">⚠️ Bu uzoq muddat o'zgarmaydigan raqam. Faqat narx haqiqatan ham o'zgargan kunda yangi qator qo'shing — eski kunlar eski narxda hisoblanaveradi.</p>
+      <p class="hint">⚠️ Бу узоқ муддат ўзгармайдиган рақам. Фақат нарх ҳақиқатан ҳам ўзгарган кунда янги қатор қўшинг — эски кунлар эски нархда ҳисобланаверади.</p>
       <div class="row">
-        <div class="field"><label>Amal qilish sanasi</label><input type="date" id="np_date"></div>
-        <div class="field"><label>Sotuv narxi</label><input type="number" id="np_sale"></div>
+        <div class="field"><label>Амал қилиш санаси</label><input type="date" id="np_date"></div>
+        <div class="field"><label>Сотув нархи</label><input type="number" id="np_sale"></div>
         <div class="field"><label>Таннарх</label><input type="number" id="np_cost"></div>
         <div class="field"><label>Акциз</label><input type="number" id="np_excise"></div>
       </div>
-      <label style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="checkbox" id="np_confirm" style="width:auto"> Ha, narx haqiqatan ham o'zgardi</label>
-      <button class="btn small" onclick="addPrice()">Yangi narx qo'shish</button>
+      <label style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="checkbox" id="np_confirm" style="width:auto"> Ҳа, нарх ҳақиқатан ҳам ўзгарди</label>
+      <button class="btn small" onclick="addPrice()">Янги нарх қўшиш</button>
     </div>
   </div>
 
   <div class="card group-tax">
-    <div class="section-title"><h2>Soliq stavkalari tarixi</h2></div>
-    <div class="table-wrap"><table><thead><tr><th>Sana (dan)</th><th>NDS</th><th>Ijtimoiy</th><th>Foyda</th></tr></thead>
+    <div class="section-title"><h2>Солиқ ставкалари тарихи</h2></div>
+    <div class="table-wrap"><table><thead><tr><th>Сана (дан)</th><th>НДС</th><th>Ижтимоий</th><th>Фойда</th></tr></thead>
       <tbody>${state.taxRates.map(t=>`<tr><td>${t.effective_date}</td><td>${pct(t.nds_rate)}</td><td>${pct(t.social_tax_rate)}</td><td>${pct(t.profit_tax_rate)}</td></tr>`).join('')}</tbody></table></div>
     <div class="confirm-wrap">
       <div class="row">
-        <div class="field"><label>Amal qilish sanasi</label><input type="date" id="tx_date"></div>
-        <div class="field"><label>NDS (%)</label><input type="number" step="0.1" id="tx_nds"></div>
-        <div class="field"><label>Ijtimoiy (%)</label><input type="number" step="0.1" id="tx_social"></div>
-        <div class="field"><label>Foyda (%)</label><input type="number" step="0.1" id="tx_profit"></div>
+        <div class="field"><label>Амал қилиш санаси</label><input type="date" id="tx_date"></div>
+        <div class="field"><label>НДС (%)</label><input type="number" step="0.1" id="tx_nds"></div>
+        <div class="field"><label>Ижтимоий (%)</label><input type="number" step="0.1" id="tx_social"></div>
+        <div class="field"><label>Фойда (%)</label><input type="number" step="0.1" id="tx_profit"></div>
       </div>
-      <label style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="checkbox" id="tx_confirm" style="width:auto"> Ha, soliq stavkasi haqiqatan ham o'zgardi</label>
-      <button class="btn small" onclick="addTaxRate()">Yangi stavka qo'shish</button>
+      <label style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="checkbox" id="tx_confirm" style="width:auto"> Ҳа, солиқ ставкаси ҳақиқатан ҳам ўзгарди</label>
+      <button class="btn small" onclick="addTaxRate()">Янги ставка қўшиш</button>
     </div>
   </div>
 
   <div class="card group-settings">
-    <div class="section-title"><h2>Doimiy xarajatlar (Ish haqi / Bank krediti / Yer-mulk solig'i / Elektr tarifi)</h2></div>
-    <div class="table-wrap"><table><thead><tr><th>Sana (dan)</th><th>Ish haqi</th><th>Bank krediti</th><th>Yer-mulk</th><th>Elektr</th></tr></thead>
+    <div class="section-title"><h2>Доимий харажатлар (Иш ҳақи / Банк кредити / Ер-мулк солиғи / Электр тарифи)</h2></div>
+    <div class="table-wrap"><table><thead><tr><th>Сана (дан)</th><th>Иш ҳақи</th><th>Банк кредити</th><th>Ер-мулк</th><th>Электр</th></tr></thead>
       <tbody>${state.fixedCosts.map(f=>`<tr><td>${f.effective_date}</td><td>${fmt(f.salary)}</td><td>${fmt(f.bank_loan_interest)}</td><td>${fmt(f.land_property_tax)}</td><td>${fmt(f.electricity_tariff)}</td></tr>`).join('')}</tbody></table></div>
     <div class="confirm-wrap">
       <div class="row">
-        <div class="field"><label>Amal qilish sanasi</label><input type="date" id="fc_date"></div>
-        <div class="field"><label>Ish haqi</label><input type="number" id="fc_salary"></div>
-        <div class="field"><label>Bank krediti</label><input type="number" id="fc_bank"></div>
-        <div class="field"><label>Yer-mulk solig'i</label><input type="number" id="fc_land"></div>
-        <div class="field"><label>Elektr tarifi</label><input type="number" id="fc_elec"></div>
+        <div class="field"><label>Амал қилиш санаси</label><input type="date" id="fc_date"></div>
+        <div class="field"><label>Иш ҳақи</label><input type="number" id="fc_salary"></div>
+        <div class="field"><label>Банк кредити</label><input type="number" id="fc_bank"></div>
+        <div class="field"><label>Ер-мулк солиғи</label><input type="number" id="fc_land"></div>
+        <div class="field"><label>Электр тарифи</label><input type="number" id="fc_elec"></div>
       </div>
-      <label style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="checkbox" id="fc_confirm" style="width:auto"> Ha, bu raqamlar haqiqatan ham o'zgardi</label>
-      <button class="btn small" onclick="addFixedCost()">Yangi qiymat qo'shish</button>
+      <label style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="checkbox" id="fc_confirm" style="width:auto"> Ҳа, бу рақамлар ҳақиқатан ҳам ўзгарди</label>
+      <button class="btn small" onclick="addFixedCost()">Янги қиймат қўшиш</button>
     </div>
   </div>`;
 }
 async function addPrice(){
-  if(!document.getElementById('np_confirm').checked){ toast("Avval tasdiqlang"); return; }
+  if(!document.getElementById('np_confirm').checked){ toast("Аввал тасдиқланг"); return; }
   const { error } = await sb.from('prices').upsert({
     effective_date: document.getElementById('np_date').value,
     sale_price: parseFloat(document.getElementById('np_sale').value),
     cost_price: parseFloat(document.getElementById('np_cost').value),
     excise: parseFloat(document.getElementById('np_excise').value)
   }, {onConflict:'effective_date'});
-  if(error){ toast("Xatolik: "+error.message); return; }
-  toast("Narx qo'shildi ✓"); await loadAll(); renderTab();
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Нарх қўшилди ✓"); await loadAll(); renderTab();
 }
 async function addTaxRate(){
-  if(!document.getElementById('tx_confirm').checked){ toast("Avval tasdiqlang"); return; }
+  if(!document.getElementById('tx_confirm').checked){ toast("Аввал тасдиқланг"); return; }
   const { error } = await sb.from('tax_rates').upsert({
     effective_date: document.getElementById('tx_date').value,
     nds_rate: parseFloat(document.getElementById('tx_nds').value)/100,
     social_tax_rate: parseFloat(document.getElementById('tx_social').value)/100,
     profit_tax_rate: parseFloat(document.getElementById('tx_profit').value)/100
   }, {onConflict:'effective_date'});
-  if(error){ toast("Xatolik: "+error.message); return; }
-  toast("Stavka qo'shildi ✓"); await loadAll(); renderTab();
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Ставка қўшилди ✓"); await loadAll(); renderTab();
 }
 async function addFixedCost(){
-  if(!document.getElementById('fc_confirm').checked){ toast("Avval tasdiqlang"); return; }
+  if(!document.getElementById('fc_confirm').checked){ toast("Аввал тасдиқланг"); return; }
   const { error } = await sb.from('fixed_costs').upsert({
     effective_date: document.getElementById('fc_date').value,
     salary: parseFloat(document.getElementById('fc_salary').value)||0,
@@ -727,8 +942,8 @@ async function addFixedCost(){
     land_property_tax: parseFloat(document.getElementById('fc_land').value)||0,
     electricity_tariff: parseFloat(document.getElementById('fc_elec').value)||0
   }, {onConflict:'effective_date'});
-  if(error){ toast("Xatolik: "+error.message); return; }
-  toast("Qiymat qo'shildi ✓"); await loadAll(); renderTab();
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Қиймат қўшилди ✓"); await loadAll(); renderTab();
 }
 
 boot();
