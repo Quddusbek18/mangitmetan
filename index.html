@@ -274,9 +274,15 @@ function pumpBaseline(){
   }
   return SEED_PUMP_START;
 }
-function companyTotals(){
+// Компания қайси станция(лар)га тегишли — метан ва бензин мижозлари
+// рўйхатда аралашиб кетмаслиги учун. 'both' — иккала жойда ҳам кўринади.
+function companiesForStation(station){
+  return state.companies.filter(c => (c.station||'both')==='both' || (c.station||'both')===station);
+}
+function companyTotals(station){
   const totals = {};
-  state.companies.forEach(c=> totals[c.id] = { id:c.id, name:c.name, m3:c.seed_m3||0, sold:c.seed_sold||0, paid:c.seed_paid||0 });
+  const list = station ? companiesForStation(station) : state.companies;
+  list.forEach(c=> totals[c.id] = { id:c.id, name:c.name, station:c.station||'both', m3:c.seed_m3||0, sold:c.seed_sold||0, paid:c.seed_paid||0 });
   state.deliveries.forEach(d=>{
     const t = totals[d.company_id]; if(!t) return;
     const price = (d.entries && d.entries.price) || 0;
@@ -287,6 +293,7 @@ function companyTotals(){
     const t = totals[p.company_id]; if(!t) return;
     t.paid += Number(p.amount)||0;
   });
+  Object.values(totals).forEach(t => { t.balance = t.paid - t.sold; });
   return Object.values(totals);
 }
 
@@ -493,7 +500,7 @@ function buildPumpFields(){
   wrap.querySelectorAll('input').forEach(inp => inp.addEventListener('input', recalcPreview));
 }
 function buildCompanySelects(){
-  const opts = state.companies.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  const opts = companiesForStation('metan').map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
   document.getElementById('delCompany').innerHTML = opts;
 }
 function addDelivery(){
@@ -1007,7 +1014,7 @@ function balanceLabel(bal){
 // the driver/client before pumping, without giving them any access to
 // balances/payments editing (that stays CEO-only).
 function lowBalanceCardHtml(){
-  const low = companyTotals().filter(c => c.balance < 1500000).sort((a,b)=>a.balance-b.balance);
+  const low = companyTotals('metan').filter(c => c.balance < 1500000).sort((a,b)=>a.balance-b.balance);
   if(!low.length) return '';
   return `
   <div class="card">
@@ -1020,7 +1027,7 @@ function lowBalanceCardHtml(){
 }
 
 function tplCompanies(role){
-  const totals = companyTotals().sort((a,b)=>a.name.localeCompare(b.name));
+  const totals = companyTotals('metan').sort((a,b)=>a.name.localeCompare(b.name));
   const canEdit = role==='ceo';
   const recentPayments = state.payments
     .filter(p=>!p.entry_id)
@@ -1069,14 +1076,20 @@ function tplCompanies(role){
       <div class="field"><label>Бошланғич m3</label><input type="number" id="nc_m3" value="0"></div>
       <div class="field"><label>Бошланғич сотилган сумма</label><input type="number" id="nc_sold" value="0"></div>
       <div class="field"><label>Бошланғич тўланган</label><input type="number" id="nc_paid" value="0"></div>
+      <div class="field"><label>Қайси станция мижози</label><select id="nc_station">
+        <option value="both">Иккаласи ҳам (метан ва бензин)</option>
+        <option value="metan" selected>Фақат метан</option>
+        <option value="benzin">Фақат бензин</option>
+      </select></div>
       <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addCompany()">Қўшиш</button></div>
     </div>
+    <p class="hint">"Фақат бензин" танласангиз, бу компания метандаги рўйхатда кўринмайди (масалан шахсий машина учун бензин олувчи мижозлар учун) — Бензин → Созламалардан ҳам компания қўшиш мумкин.</p>
   </div>` : ''}`;
 }
 function afterRenderCompanies(){
   const sel = document.getElementById('cp_company');
   if(sel){
-    sel.innerHTML = state.companies.slice().sort((a,b)=>a.name.localeCompare(b.name))
+    sel.innerHTML = companiesForStation('metan').slice().sort((a,b)=>a.name.localeCompare(b.name))
       .map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
   }
 }
@@ -1104,15 +1117,28 @@ async function deleteCompanyPayment(id){
 async function addCompany(){
   const name = document.getElementById('nc_name').value.trim();
   if(!name){ toast("Ном киритинг"); return; }
+  const stationSel = document.getElementById('nc_station');
   const { error } = await sb.from('companies').insert({
     name,
     seed_m3: parseFloat(document.getElementById('nc_m3').value)||0,
     seed_sold: parseFloat(document.getElementById('nc_sold').value)||0,
     seed_paid: parseFloat(document.getElementById('nc_paid').value)||0,
+    station: stationSel ? stationSel.value : 'both',
     created_by_name: state.profile.full_name
   });
   if(error){ toast("Хатолик: "+error.message); return; }
   toast("Компания қўшилди ✓");
+  await loadAll(); renderTab();
+}
+async function addBenzinCompany(){
+  const name = document.getElementById('bzc_name').value.trim();
+  if(!name){ toast("Ном киритинг"); return; }
+  const { error } = await sb.from('companies').insert({
+    name, station:'benzin', created_by_name: state.profile.full_name
+  });
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Мижоз қўшилди ✓");
+  document.getElementById('bzc_name').value = '';
   await loadAll(); renderTab();
 }
 async function deleteCompany(id){
@@ -1362,6 +1388,60 @@ function benzinStockSummary(){
   });
 }
 
+// ФИФО (аввал келган — аввал сотилган) таннарх ҳисоби: ҳар бир ЕТКАЗИБ
+// БЕРИШ (benzin_deliveries) ўзининг ҳақиқий таннархи (total_sum/liters)
+// билан "партия" сифатида сақланади, ва сотилган литрлар хронологик
+// тартибда ЭНГ ЭСКИ партиядан бошлаб "ейилади". Шунда, масалан, эски
+// қолдиқ 9 000 сўм/литрдан, кейин келган янги партия 8 800 сўм/литрдан
+// ҳисобланади — иккаласи АРАЛАШТИРИЛМАЙДИ. Таннархи қоғозда йўқ партия
+// (яъни накладной топилмаган кун) учун ёки партиялар тугаб қолса,
+// Созламалардаги жорий таннарх қиймати захира сифатида ишлатилади.
+function benzinFifoCogs(){
+  const batchesByFuel = {};
+  state.benzinDeliveries.slice()
+    .sort((a,b)=> a.date < b.date ? -1 : (a.date > b.date ? 1 : 0))
+    .forEach(d=>{
+      const ftId = d.fuel_type_id;
+      if(!batchesByFuel[ftId]) batchesByFuel[ftId] = [];
+      const liters = Number(d.liters)||0;
+      const totalSum = Number(d.total_sum)||0;
+      const costPerLiter = (totalSum > 0 && liters > 0) ? (totalSum/liters) : null;
+      batchesByFuel[ftId].push({ date: d.date, remaining: liters, costPerLiter });
+    });
+  const calc = benzinComputeAll();
+  const asc = state.benzinEntries.slice().sort((a,b)=> a.date < b.date ? -1 : (a.date > b.date ? 1 : 0));
+  const cogsByEntry = {};
+  asc.forEach(e=>{
+    const c = calc[e.id];
+    if(!c) return;
+    const byFuel = {};
+    let totalCogs = 0;
+    Object.keys(c.soldByFuel).forEach(ftId=>{
+      let need = c.soldByFuel[ftId];
+      let cost = 0;
+      const batches = batchesByFuel[ftId] || [];
+      for(const b of batches){
+        if(need <= 0) break;
+        if(b.remaining <= 0) continue;
+        const take = Math.min(b.remaining, need);
+        const cpl = (b.costPerLiter != null) ? b.costPerLiter : fuelPriceRowFor(ftId, b.date).cost_price;
+        cost += take * cpl;
+        b.remaining -= take;
+        need -= take;
+      }
+      if(need > 0){
+        // Партиялар тугади / ёзилмаган — жорий (созламадаги) таннархдан фойдаланамиз.
+        const cpl = fuelPriceRowFor(ftId, e.date).cost_price;
+        cost += need * cpl;
+      }
+      byFuel[ftId] = { liters: c.soldByFuel[ftId], cogs: cost };
+      totalCogs += cost;
+    });
+    cogsByEntry[e.id] = { byFuel, totalCogs };
+  });
+  return cogsByEntry;
+}
+
 // Бензиннинг ойлик "қанча реал даромад қолиши" ҳисоби. МУҲИМ ЧЕКЛОВ:
 // бу фақат бензиннинг ЎЗИГА тегишли рақамлар (сотув − таннарх − акциз −
 // НДС нетто) — яъни ЯЛПИ фойда. Иш ҳақи, электр, банк, ер-мулк солиғи каби
@@ -1371,23 +1451,32 @@ function benzinStockSummary(){
 // қаторини ҳам қўшамиз.
 function computeBenzinMonthlyPL(monthStr){
   const calc = benzinComputeAll();
+  const fifoCogs = benzinFifoCogs();
   const monthEntries = state.benzinEntries.filter(e=> e.date && e.date.slice(0,7)===monthStr);
   let revenue = 0;
   const soldByFuel = {};
+  let cogs = 0;
+  const cogsByFuel = {};
   monthEntries.forEach(e=>{
     const c = calc[e.id];
     if(!c) return;
     revenue += c.revenue;
     Object.keys(c.soldByFuel).forEach(ftId=>{ soldByFuel[ftId] = (soldByFuel[ftId]||0) + c.soldByFuel[ftId]; });
+    const fc = fifoCogs[e.id];
+    if(fc){
+      cogs += fc.totalCogs;
+      Object.keys(fc.byFuel).forEach(ftId=>{ cogsByFuel[ftId] = (cogsByFuel[ftId]||0) + fc.byFuel[ftId].cogs; });
+    }
   });
 
-  let cogs = 0, excise = 0;
+  let excise = 0;
   const byFuelRows = Object.keys(soldByFuel).map(ftId=>{
     const row = fuelPriceRowFor(ftId, monthStr+'-28');
     const liters = soldByFuel[ftId];
-    cogs += liters * row.cost_price;
     excise += liters * row.excise;
-    return { name: fuelTypeName(ftId), liters, costPrice: row.cost_price, excise: row.excise };
+    // ФИФОдан келиб чиққан шу ойдаги ЎРТАЧА таннарх (кўрсатиш учун; ҳисобда cogs тўғридан-тўғри ишлатилади)
+    const costPrice = liters>0 ? (cogsByFuel[ftId]||0)/liters : row.cost_price;
+    return { name: fuelTypeName(ftId), liters, costPrice, excise: row.excise };
   });
 
   const tax = taxFor(monthStr+'-01');
@@ -1556,12 +1645,22 @@ function tplBenzinSettings(){
     <p class="hint">Агар ТТН'да фақат тонна кўрсатилса, қабул қилишда шу зичлик орқали литрга авто-ҳисобланади. Аниқ билмасангиз бўш қолдиринг — литрни қўлда киритаверасиз.</p>
     <div class="table-wrap"><table><thead><tr><th>Тур</th><th>Зичлик (кг/л)</th></tr></thead>
       <tbody>${state.fuelTypes.map(f=>`<tr><td>${esc(f.name)}</td><td><input type="number" step="0.001" value="${f.density_kg_per_liter||''}" placeholder="масалан 0.750" onchange="setFuelDensity('${f.id}', this.value)"></td></tr>`).join('')}</tbody></table></div>
+  </div>
+  <div class="card group-company">
+    <div class="section-title"><h2>Бензин мижозлари (компаниялар)</h2></div>
+    <p class="hint">Бу ерда қўшилган компания фақат бензин рўйхатларида кўринади (метандаги "Компаниялар" бўлимида чиқмайди) — масалан шахсий машина учун бензин олувчи мижозлар шу ерга қўшилади.</p>
+    <div class="table-wrap"><table><thead><tr><th>Номи</th></tr></thead>
+      <tbody>${companiesForStation('benzin').slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<tr><td>${esc(c.name)}</td></tr>`).join('') || '<tr><td class="empty">Ҳали қўшилмаган</td></tr>'}</tbody></table></div>
+    <div class="row" style="margin-top:10px">
+      <div class="field" style="flex:2"><label>Янги мижоз номи</label><input type="text" id="bzc_name" placeholder="масалан: Дадам (машина 611)"></div>
+      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addBenzinCompany()">Қўшиш</button></div>
+    </div>
   </div>`;
 }
 
 function afterRenderBenzinDaily(){
   const sel = document.getElementById('bz_sale_company');
-  if(sel) sel.innerHTML = state.companies.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  if(sel) sel.innerHTML = companiesForStation('benzin').slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
   benzinPending = { sales: [] };
   renderBenzinSalesList();
   document.querySelectorAll('#bzDispenserFields input').forEach(inp=>inp.addEventListener('input', recalcBenzinPreview));
@@ -2008,7 +2107,7 @@ function exportMetanExcel(){
   addSheet('Kompaniya tolovlari', state.payments.map(p=>({
     Sana:p.date, Kompaniya:(state.companies.find(c=>c.id===p.company_id)||{}).name||'', Summa:p.amount, Izoh:p.note, KimKiritgan:p.created_by_name
   })));
-  addSheet('Kompaniyalar (balans)', companyTotals().map(c=>({ Nomi:c.name, SotilganM3:c.m3, SotilganSumma:c.sold, Tolangan:c.paid, Balans:c.paid-c.sold })));
+  addSheet('Kompaniyalar (balans)', companyTotals('metan').map(c=>({ Nomi:c.name, SotilganM3:c.m3, SotilganSumma:c.sold, Tolangan:c.paid, Balans:c.paid-c.sold })));
   addSheet('Xodimlar', state.employees.map(e=>({ Ism:e.full_name, Lavozim:e.position, Faol:e.active?'Ha':"Yo'q" })));
   addSheet('Oyliklar tarixi', state.employeeSalaries.map(s=>({
     Xodim:(state.employees.find(e=>e.id===s.employee_id)||{}).full_name||'', SanaDan:s.effective_date, Summa:s.amount
