@@ -1631,13 +1631,26 @@ function tplBenzinSettings(){
       <div class="field"><label>Нарх — қайси турга</label><select id="fp_fuel">${state.fuelTypes.map(f=>`<option value="${f.id}">${esc(f.name)}</option>`).join('')}</select></div>
       <div class="field"><label>Амал қилиш санаси</label><input type="date" id="fp_date"></div>
       <div class="field"><label>Сотув нархи (сўм/л)</label><input type="number" id="fp_price"></div>
-      <div class="field"><label>Таннарх (сўм/л)</label><input type="number" id="fp_cost"></div>
       <div class="field"><label>Акциз (сўм/л)</label><input type="number" id="fp_excise" placeholder="ҳозирча номаълум бўлса 0"></div>
       <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addFuelPrice()">Нарх қўшиш</button></div>
     </div>
-    <p class="hint">⚠ Акциз ставкасини аниқ билмасангиз, 0 қолдиринг ва бухгалтер билан аниқлаштиргандан кейин киритинг — 0 турганда Бензин ҳисоб-китобида акциз чиқармайди (кам кўрсатилган фойда/солиқ хавфи бор!).</p>
-    <div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>Тур</th><th>Сана</th><th>Сотув</th><th>Таннарх</th><th>Акциз</th></tr></thead>
-      <tbody>${state.fuelPrices.map(p=>`<tr><td>${fuelTypeName(p.fuel_type_id)}</td><td>${p.effective_date}</td><td>${fmt(p.sale_price)}</td><td>${fmt(p.cost_price)}</td><td>${fmt(p.excise)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">Ҳали киритилмаган</td></tr>'}</tbody></table></div>
+    <p class="hint">⚠ Акциз ставкасини аниқ билмасангиз, 0 қолдиринг ва бухгалтер билан аниқлаштиргандан кейин киритинг — 0 турганда Бензин ҳисоб-китобида акциз чиқармайди (кам кўрсатилган фойда/солиқ хавфи бор!). Таннарх бу ерда қўлда киритилмайди — у "Бензин қабул қилиш" формасидаги ҳар бир накладнойнинг ҳақиқий суммасидан (ФИФО тартибида) автоматик ҳисобланади.</p>
+    <div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>Тур</th><th>Сана</th><th>Сотув</th><th>Акциз</th></tr></thead>
+      <tbody>${state.fuelPrices.map(p=>`<tr><td>${fuelTypeName(p.fuel_type_id)}</td><td>${p.effective_date}</td><td>${fmt(p.sale_price)}</td><td>${fmt(p.excise)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">Ҳали киритилмаган</td></tr>'}</tbody></table></div>
+    <h3 style="margin-top:16px">Солиқ ставкалари (НДС, ижтимоий, фойда солиғи)</h3>
+    <p class="hint">Бу ставкалар метан ва бензин учун умумий (бир компания) — шунга шу ерда ёки метан созламаларида киритилса, иккаласида ҳам ишлайди.</p>
+    <div class="table-wrap"><table><thead><tr><th>Сана (дан)</th><th>НДС</th><th>Ижтимоий</th><th>Фойда</th><th>Ким киритган</th></tr></thead>
+      <tbody>${state.taxRates.map(t=>`<tr><td>${t.effective_date}</td><td>${pct(t.nds_rate)}</td><td>${pct(t.social_tax_rate)}</td><td>${pct(t.profit_tax_rate)}</td><td class="hint">${esc(t.created_by_name||'—')}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">Ҳали киритилмаган</td></tr>'}</tbody></table></div>
+    <div class="confirm-wrap">
+      <div class="row">
+        <div class="field"><label>Амал қилиш санаси</label><input type="date" id="tx_date"></div>
+        <div class="field"><label>НДС (%)</label><input type="number" step="0.1" id="tx_nds"></div>
+        <div class="field"><label>Ижтимоий (%)</label><input type="number" step="0.1" id="tx_social"></div>
+        <div class="field"><label>Фойда (%)</label><input type="number" step="0.1" id="tx_profit"></div>
+      </div>
+      <label style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="checkbox" id="tx_confirm" style="width:auto"> Ҳа, солиқ ставкаси ҳақиқатан ҳам ўзгарди</label>
+      <button class="btn small" onclick="addTaxRate()">Янги ставка қўшиш</button>
+    </div>
     <h3 style="margin-top:16px">Калонкалар — қайси марка бириктирилган</h3>
     <div class="table-wrap"><table><thead><tr><th>Калонка</th><th>Ёқилғи тури</th></tr></thead>
       <tbody>${state.dispensers.map(d=>`<tr><td>${esc(d.name)}</td><td><select onchange="setDispenserFuel('${d.id}', this.value)">${state.fuelTypes.map(f=>`<option value="${f.id}" ${f.id===d.fuel_type_id?'selected':''}>${esc(f.name)}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>
@@ -1978,7 +1991,10 @@ async function addFuelPrice(){
   const fuelId = document.getElementById('fp_fuel').value;
   const date = document.getElementById('fp_date').value;
   const price = parseFloat(document.getElementById('fp_price').value);
-  const cost = parseFloat(document.getElementById('fp_cost').value)||0;
+  // Таннарх энди қўлда киритилмайди — "Бензин қабул қилиш" (benzin_deliveries)
+  // ёзувларидан ФИФО тартибида автоматик ҳисобланади (қаранг: benzinFifoCogs()).
+  // Бу 0 фақат партиялар тугаб қолганда ёки таннархи ёзилмаган кунларда захира сифатида ишлатилади.
+  const cost = 0;
   const excise = parseFloat(document.getElementById('fp_excise').value)||0;
   if(!date || !price){ toast("Сана ва нархни киритинг"); return; }
   const { error } = await sb.from('fuel_prices').upsert({
