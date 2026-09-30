@@ -262,9 +262,11 @@ function taxFor(dateStr){
   for(const t of state.taxRates){ if(t.effective_date <= dateStr) best = t; }
   return best;
 }
-function fixedCostFor(dateStr){
-  let best = state.fixedCosts[0] || {salary:0, bank_loan_interest:0, land_property_tax:0, electricity_tariff:0};
-  for(const f of state.fixedCosts){ if(f.effective_date <= dateStr) best = f; }
+function fixedCostFor(dateStr, station){
+  station = station || 'metan';
+  const rows = state.fixedCosts.filter(f=> (f.station||'metan')===station );
+  let best = rows[0] || {salary:0, bank_loan_interest:0, land_property_tax:0, electricity_tariff:0};
+  rows.forEach(f=>{ if(f.effective_date <= dateStr) best = f; });
   return best;
 }
 function pumpBaseline(){
@@ -311,8 +313,8 @@ function tabsForRole(role, station){
   }
   if(station === 'benzin'){
     if(role === 'operator') return [['bz_daily','Кунлик ишлар']];
-    if(role === 'direktor') return [['bz_reports','Ҳисоботлар']];
-    return [['bz_daily','Кунлик ишлар'],['bz_reports','Ҳисоботлар'],['bz_settings','Созламалар']];
+    if(role === 'direktor') return [['bz_reports','Ҳисоботлар'],['bz_expenses','Харажатлар'],['bz_salaries','Ойликлар']];
+    return [['bz_daily','Кунлик ишлар'],['bz_reports','Ҳисоботлар'],['bz_expenses','Харажатлар'],['bz_salaries','Ойликлар'],['bz_settings','Созламалар']];
   }
   if(station === 'umumiy') return [['dashboard','Умумий ҳолат']];
   return [];
@@ -379,6 +381,8 @@ function renderTab(){
   else if(activeTab==='salaries') body.innerHTML = tplSalaries(role);
   else if(activeTab==='bz_daily') body.innerHTML = tplBenzinDaily(role);
   else if(activeTab==='bz_reports') body.innerHTML = tplBenzinReports();
+  else if(activeTab==='bz_expenses') body.innerHTML = tplBenzinExpenses(role);
+  else if(activeTab==='bz_salaries') body.innerHTML = tplSalaries(role, 'benzin');
   else if(activeTab==='bz_settings') body.innerHTML = tplBenzinSettings();
   else if(activeTab==='dashboard') body.innerHTML = tplDashboard();
   afterRenderTab();
@@ -398,7 +402,13 @@ function afterRenderTab(){
     afterRenderDashboard();
   }
   if(activeTab==='salaries'){
-    afterRenderSalaries();
+    afterRenderSalaries('metan');
+  }
+  if(activeTab==='bz_salaries'){
+    afterRenderSalaries('benzin');
+  }
+  if(activeTab==='bz_expenses'){
+    afterRenderBenzinExpenses();
   }
   if(activeTab==='reports'){
     document.getElementById('rep_date').addEventListener('change', renderReportDetail);
@@ -701,10 +711,10 @@ function computeMonthlyPL(monthStr){
   // билан) ҳисобланади. Агар ҳали ходим киритилмаган бўлса (масалан эски
   // импорт қилинган ойлар), эски Доимий харажатлардаги якка рақамга
   // fallback қилинади.
-  const salary = totalSalaryFor(monthStr) || Number(fc.salary)||0;
+  const salary = totalSalaryFor(monthStr, 'metan') || Number(fc.salary)||0;
   const bank = Number(fc.bank_loan_interest)||0;
   const land = Number(fc.land_property_tax)||0;
-  const otherExp = state.otherExpenses.filter(e=>e.date && e.date.slice(0,7)===monthStr).reduce((s,e)=>s+Number(e.amount||0),0);
+  const otherExp = state.otherExpenses.filter(e=>e.date && e.date.slice(0,7)===monthStr && (e.station||'metan')==='metan').reduce((s,e)=>s+Number(e.amount||0),0);
   const expensesTotal = cogsGas + electricity + salary + bank + otherExp;
 
   const tax = taxFor(monthStr+'-01');
@@ -1177,16 +1187,16 @@ function tplExpenses(role){
     <div class="section-title"><h2>Бошқа харажатлар</h2></div>
     <div class="table-wrap">
       <table><thead><tr><th>Сана</th><th>Тавсиф</th><th>Сумма</th><th>Ким киритган</th>${canEdit?'<th></th>':''}</tr></thead>
-      <tbody>${state.otherExpenses.map(e=>
+      <tbody>${state.otherExpenses.filter(e=>(e.station||'metan')==='metan').map(e=>
         `<tr><td>${e.date}</td><td>${esc(e.description)}</td><td>${fmt(e.amount)}</td><td class="hint">${esc(e.created_by_name||'—')}</td>
           ${canEdit?`<td><button class="del" onclick="deleteOtherExpense('${e.id}')">✕</button></td>`:''}</tr>`
       ).join('') || `<tr><td colspan="${canEdit?5:4}" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
     </div>
     ${canEdit ? `<div class="row" style="margin-top:10px">
-      <div class="field"><label>Сана</label><input type="date" id="oe_date" value="${todayISO()}"></div>
-      <div class="field" style="flex:2"><label>Тавсиф</label><input type="text" id="oe_desc"></div>
-      <div class="field"><label>Сумма</label><input type="number" id="oe_amount"></div>
-      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addOtherExpense()">Қўшиш</button></div>
+      <div class="field"><label>Сана</label><input type="date" id="oe_date_metan" value="${todayISO()}"></div>
+      <div class="field" style="flex:2"><label>Тавсиф</label><input type="text" id="oe_desc_metan"></div>
+      <div class="field"><label>Сумма</label><input type="number" id="oe_amount_metan"></div>
+      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addOtherExpense('metan')">Қўшиш</button></div>
     </div>` : ''}
   </div>`;
 }
@@ -1214,11 +1224,13 @@ async function deleteOtherExpense(id){
   if(error){ toast("Хатолик: "+error.message); return; }
   toast("Ўчирилди ✓"); await loadAll(); renderTab();
 }
-async function addOtherExpense(){
+async function addOtherExpense(station){
+  station = station || 'metan';
   const { error } = await sb.from('other_expenses').insert({
-    date: document.getElementById('oe_date').value,
-    description: document.getElementById('oe_desc').value.trim(),
-    amount: parseFloat(document.getElementById('oe_amount').value)||0,
+    date: document.getElementById('oe_date_'+station).value,
+    description: document.getElementById('oe_desc_'+station).value.trim(),
+    amount: parseFloat(document.getElementById('oe_amount_'+station).value)||0,
+    station,
     created_by_name: state.profile.full_name
   });
   if(error){ toast("Хатолик: "+error.message); return; }
@@ -1316,12 +1328,27 @@ async function addFixedCost(){
   if(!document.getElementById('fc_confirm').checked){ toast("Аввал тасдиқланг"); return; }
   const { error } = await sb.from('fixed_costs').upsert({
     effective_date: document.getElementById('fc_date').value,
+    station: 'metan',
     salary: parseFloat(document.getElementById('fc_salary').value)||0,
     bank_loan_interest: parseFloat(document.getElementById('fc_bank').value)||0,
     land_property_tax: parseFloat(document.getElementById('fc_land').value)||0,
     electricity_tariff: parseFloat(document.getElementById('fc_elec').value)||0,
     created_by_name: state.profile.full_name
-  }, {onConflict:'effective_date'});
+  }, {onConflict:'effective_date,station'});
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Қиймат қўшилди ✓"); await loadAll(); renderTab();
+}
+async function addBenzinFixedCost(){
+  if(!document.getElementById('bfc_confirm').checked){ toast("Аввал тасдиқланг"); return; }
+  const { error } = await sb.from('fixed_costs').upsert({
+    effective_date: document.getElementById('bfc_date').value,
+    station: 'benzin',
+    salary: 0,
+    bank_loan_interest: 0,
+    land_property_tax: 0,
+    electricity_tariff: parseFloat(document.getElementById('bfc_elec').value)||0,
+    created_by_name: state.profile.full_name
+  }, {onConflict:'effective_date,station'});
   if(error){ toast("Хатолик: "+error.message); return; }
   toast("Қиймат қўшилди ✓"); await loadAll(); renderTab();
 }
@@ -1479,15 +1506,26 @@ function computeBenzinMonthlyPL(monthStr){
     return { name: fuelTypeName(ftId), liters, costPrice, excise: row.excise };
   });
 
+  const fcBenzin = fixedCostFor(monthStr+'-01', 'benzin');
+  const electricity = Number(fcBenzin.electricity_tariff)||0;
+  const salary = totalSalaryFor(monthStr, 'benzin');
+  const otherExp = state.otherExpenses.filter(e=>e.date && e.date.slice(0,7)===monthStr && (e.station||'metan')==='benzin').reduce((s,e)=>s+Number(e.amount||0),0);
+  const expensesTotal = electricity + salary + otherExp;
+
   const tax = taxFor(monthStr+'-01');
   const ndsRate = Number(tax.nds_rate)||0;
   const outputVat = revenue * (ndsRate/(1+ndsRate));
-  const inputVat = cogs * (ndsRate/(1+ndsRate));
+  const inputVat = (cogs + electricity) * (ndsRate/(1+ndsRate));
   const ndsNet = outputVat - inputVat;
+  const socialAmount = salary * (Number(tax.social_tax_rate)||0);
 
   const grossProfit = revenue - cogs - excise - ndsNet;
+  const profitBeforeTax = grossProfit - electricity - salary - otherExp - socialAmount;
+  const profitTaxAmount = Math.max(profitBeforeTax, 0) * (Number(tax.profit_tax_rate)||0);
+  const netProfit = profitBeforeTax - profitTaxAmount;
 
-  return { count: monthEntries.length, revenue, byFuelRows, cogs, excise, outputVat, inputVat, ndsNet, grossProfit, tax };
+  return { count: monthEntries.length, revenue, byFuelRows, cogs, excise, outputVat, inputVat, ndsNet, grossProfit,
+    electricity, salary, otherExp, expensesTotal, socialAmount, profitBeforeTax, profitTaxAmount, netProfit, tax };
 }
 function renderBenzinPL(){
   const monthStr = document.getElementById('bpl_month').value || currentMonthKey();
@@ -1497,21 +1535,73 @@ function renderBenzinPL(){
   const row = (label, value, opts={}) => `<div class="pl-row${opts.bold?' pl-bold':''}${opts.indent?' pl-indent':''}"><span>${label}</span><span class="${opts.cls||''}">${value}</span></div>`;
   const zeroExcise = pl.byFuelRows.some(r=>r.excise===0);
   box.innerHTML = `
-    <p class="hint" style="margin-bottom:10px">${pl.count} та кунлик ҳисобот асосида. ⚠ Бу фақат бензиннинг ЯЛПИ фойдаси — иш ҳақи/электр/банк/ер-мулк каби умумий харажатлар кирмайди (улар метан ва бензин орасида қандай бўлинишини айтсангиз, шуни ҳам қўшамиз).</p>
+    <p class="hint" style="margin-bottom:10px">${pl.count} та кунлик ҳисобот асосида, ФИФО (аввал келган — аввал сотилган) таннарх ҳисоби бўйича.</p>
     <div class="pl-group-title">Даромад</div>
     ${row('Сотув суммаси (жами)', fmt(pl.revenue)+" сўм")}
-    <div class="pl-group-title">Таннарх (ёқилғи тури бўйича)</div>
+    <div class="pl-group-title">Таннарх (ёқилғи тури бўйича, ФИФО)</div>
     ${pl.byFuelRows.map(r=>row(esc(r.name)+' — '+fmt(r.liters)+' л × '+fmt(r.costPrice), fmt(r.liters*r.costPrice)+" сўм", {indent:true})).join('') || row('—','0 сўм',{indent:true})}
     ${row('= Таннарх жами', fmt(pl.cogs)+" сўм", {bold:true})}
+    <div class="pl-group-title">Харажатлар</div>
+    ${row('Электр энергияси (ойлик, жами)', fmt(pl.electricity)+" сўм", {indent:true})}
+    ${row('Иш ҳақи (Бензин ходимлари)', fmt(pl.salary)+" сўм", {indent:true})}
+    ${row('Бошқа харажатлар', fmt(pl.otherExp)+" сўм", {indent:true})}
+    ${row('= Харажатлар жами', fmt(pl.expensesTotal)+" сўм", {bold:true})}
     <div class="pl-group-title">Солиқлар</div>
     ${row('Акциз солиғи', fmt(pl.excise)+" сўм", {indent:true})}
     ${row('НДС — чиқим ('+pct(pl.tax.nds_rate)+', сотувдан)', fmt(pl.outputVat)+" сўм", {indent:true})}
-    ${row('НДС — кирим (ёқилғи харидидан)', '− '+fmt(pl.inputVat)+" сўм", {indent:true})}
+    ${row('НДС — кирим (ёқилғи+электр харидидан)', '− '+fmt(pl.inputVat)+" сўм", {indent:true})}
     ${row('= НДС (тўланадиган, нетто)', fmt(pl.ndsNet)+" сўм", {indent:true})}
+    ${row('Ижтимоий солиқ ('+pct(pl.tax.social_tax_rate)+', иш ҳақидан)', fmt(pl.socialAmount)+" сўм", {indent:true})}
     <div class="pl-group-title">Натижа</div>
-    ${row('= ЯЛПИ ФОЙДА (умумий харажатларгача)', fmt(pl.grossProfit)+" сўм", {bold:true, cls: pl.grossProfit<0?'bad-text':'good-text'})}
+    ${row('= Фойда (солиққача)', fmt(pl.profitBeforeTax)+" сўм", {bold:true})}
+    ${row('− Фойда солиғи ('+pct(pl.tax.profit_tax_rate)+')', fmt(pl.profitTaxAmount)+" сўм", {indent:true})}
+    ${row('= СОФ ФОЙДА', fmt(pl.netProfit)+" сўм", {bold:true, cls: pl.netProfit<0?'bad-text':'good-text'})}
     ${zeroExcise ? `<div class="review-warn" style="margin-top:10px">⚠ Баъзи ёқилғи турларида акциз ставкаси 0 турибди (Созламалар → Бензин созламаларида ҳали киритилмаган) — демак юқоридаги фойда ҳақиқийдан КЎПРОҚ кўринади. Бухгалтер билан аниқлаштириб киритинг.</div>` : ''}`;
 }
+
+// ============================================================
+// БЕНЗИН — Харажатлар (Электр + бошқа харажатлар). Метандан алоҳида —
+// (Ойликлар/Ойлик иш ҳақи ўз алоҳида табида — "Ойликлар".)
+// ============================================================
+function tplBenzinExpenses(role){
+  const canEdit = role==='ceo';
+  const bzFixedCosts = state.fixedCosts.filter(f=>(f.station||'metan')==='benzin');
+  return `
+  <div class="card group-settings">
+    <div class="section-title"><h2>Электр энергияси (ойлик, жами)</h2></div>
+    <p class="hint">Ҳар ой электр ҳисоби келгач, шу ойнинг умумий суммасини (сўмда) шу ерга янги қатор қилиб қўшинг.</p>
+    <div class="table-wrap"><table><thead><tr><th>Сана (дан)</th><th>Электр (ойлик, жами)</th><th>Ким киритган</th></tr></thead>
+      <tbody>${bzFixedCosts.map(f=>`<tr><td>${f.effective_date}</td><td>${fmt(f.electricity_tariff)}</td><td class="hint">${esc(f.created_by_name||'—')}</td></tr>`).join('') || `<tr><td colspan="3" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table></div>
+    ${canEdit ? `<div class="confirm-wrap">
+      <div class="row">
+        <div class="field"><label>Амал қилиш санаси</label><input type="date" id="bfc_date" value="${todayISO()}"></div>
+        <div class="field"><label>Электр (ойлик, жами сўм)</label><input type="number" id="bfc_elec"></div>
+      </div>
+      <label style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="checkbox" id="bfc_confirm" style="width:auto"> Ҳа, бу рақам ҳақиқатан ҳам ўзгарди</label>
+      <button class="btn small" onclick="addBenzinFixedCost()">Янги қиймат қўшиш</button>
+    </div>` : ''}
+  </div>
+
+  <div class="card group-expense">
+    <div class="section-title"><h2>Бошқа харажатлар</h2></div>
+    <div class="table-wrap">
+      <table><thead><tr><th>Сана</th><th>Тавсиф</th><th>Сумма</th><th>Ким киритган</th>${canEdit?'<th></th>':''}</tr></thead>
+      <tbody>${state.otherExpenses.filter(e=>(e.station||'metan')==='benzin').map(e=>
+        `<tr><td>${e.date}</td><td>${esc(e.description)}</td><td>${fmt(e.amount)}</td><td class="hint">${esc(e.created_by_name||'—')}</td>
+          ${canEdit?`<td><button class="del" onclick="deleteOtherExpense('${e.id}')">✕</button></td>`:''}</tr>`
+      ).join('') || `<tr><td colspan="${canEdit?5:4}" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
+    </div>
+    ${canEdit ? `<div class="row" style="margin-top:10px">
+      <div class="field"><label>Сана</label><input type="date" id="oe_date_benzin" value="${todayISO()}"></div>
+      <div class="field" style="flex:2"><label>Тавсиф</label><input type="text" id="oe_desc_benzin"></div>
+      <div class="field"><label>Сумма</label><input type="number" id="oe_amount_benzin"></div>
+      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addOtherExpense('benzin')">Қўшиш</button></div>
+    </div>` : ''}
+  </div>
+
+  <p class="hint">Ижтимоий солиқ ва фойда солиғи ставкалари МЕТАН БИЛАН БИР ХИЛ — "Бензин → Созламалар"да киритилади/ўзгартирилади, ва "Ҳисоботлар"даги ойлик ҳисобда автоматик қўлланилади.</p>`;
+}
+function afterRenderBenzinExpenses(){ /* ҳозирча алоҳида init шарт эмас */ }
 
 function tplBenzinDaily(role){
   const canEdit = role==='operator' || role==='ceo';
@@ -1564,10 +1654,14 @@ function tplBenzinDaily(role){
     <div class="row">
       <div class="field"><label>Сана</label><input type="date" id="bd_date" value="${todayISO()}"></div>
       <div class="field"><label>Ёқилғи тури</label><select id="bd_fuel" onchange="benzinTonsToLiters()">${state.fuelTypes.map(f=>`<option value="${f.id}">${esc(f.name)}</option>`).join('')}</select></div>
-      <div class="field"><label>Тонна (ихтиёрий)</label><input type="number" step="0.001" id="bd_tons" placeholder="агар ТТН'да тонна бўлса" oninput="benzinTonsToLiters()"></div>
-      <div class="field"><label>Литр</label><input type="number" id="bd_liters" step="0.01"></div>
+      <div class="field"><label>ТТН рақами</label><input type="text" id="bd_ttn" placeholder="масалан 0001234"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Тонна (ТТН'даги, кг/т)</label><input type="number" step="0.001" id="bd_tons" placeholder="ТТН'да кўрсатилган тонна" oninput="benzinTonsToLiters()"></div>
+      <div class="field"><label>Литр (пумпага қуйилган)</label><input type="number" id="bd_liters" step="0.01"></div>
       <div class="field"><label>Жами сумма (сўм)</label><input type="number" id="bd_sum" step="1"></div>
     </div>
+    <p class="hint">Тонна ва литр — ИККИ ХИЛ ўлчам, алоҳида-алоҳида сақланади (бир-бири билан аралашмайди). Тонна фақат ТТН'даги оғирликни ёзиб қўйиш ва зичлик орқали литрни тахминий ҳисоблаш учун — асосий ҳисоб литрда юритилади.</p>
     <div class="row">
       <div class="field" style="flex:2"><label>Етказиб берувчи</label><input type="text" id="bd_supplier" placeholder="Тахиаташ нефтебазаси"></div>
       <div class="field" style="flex:2"><label>Шартнома/Биржа рақами</label><input type="text" id="bd_contract" placeholder="Биржа Т 8766613 от 18.09.2026"></div>
@@ -1577,12 +1671,12 @@ function tplBenzinDaily(role){
   </div>
   <div class="card">
     <h2>Сўнгги қабул қилишлар</h2>
-    <div class="table-wrap"><table><thead><tr><th>Сана</th><th>Тури</th><th>Литр</th><th>Сумма</th><th>Етказиб берувчи</th><th>Расм</th><th>Ким қабул қилди</th></tr></thead>
+    <div class="table-wrap"><table><thead><tr><th>Сана</th><th>ТТН №</th><th>Тури</th><th>Тонна</th><th>Литр</th><th>Сумма</th><th>Етказиб берувчи</th><th>Расм</th><th>Ким қабул қилди</th></tr></thead>
       <tbody>${state.benzinDeliveries.slice(0,20).map(d=>
-        `<tr><td>${d.date}</td><td>${esc(fuelTypeName(d.fuel_type_id))}</td><td>${fmt(d.liters)}</td><td>${fmt(d.total_sum)}</td><td>${esc(d.supplier_name||'')}</td>
+        `<tr><td>${d.date}</td><td>${esc(d.ttn_number||'—')}</td><td>${esc(fuelTypeName(d.fuel_type_id))}</td><td>${d.tons?fmt(d.tons):'—'}</td><td>${fmt(d.liters)}</td><td>${fmt(d.total_sum)}</td><td>${esc(d.supplier_name||'')}</td>
           <td>${d.photo_path?`<button class="btn secondary small" onclick="viewBenzinPhoto('${d.photo_path}')">Кўриш</button>`:'—'}</td>
           <td class="hint">${esc(d.received_by_name||'—')}</td></tr>`
-      ).join('') || `<tr><td colspan="7" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
+      ).join('') || `<tr><td colspan="9" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
     </div>
   </div>`;
 
@@ -1944,6 +2038,7 @@ async function addBenzinDelivery(){
     document.getElementById('bd_liters').value=''; document.getElementById('bd_sum').value='';
     document.getElementById('bd_tons').value=''; document.getElementById('bd_supplier').value='';
     document.getElementById('bd_contract').value=''; document.getElementById('bd_photo').value='';
+    document.getElementById('bd_ttn').value='';
     return;
   }
 
@@ -1961,6 +2056,7 @@ async function addBenzinDelivery(){
     }
     const { error } = await sb.from('benzin_deliveries').insert({
       date, fuel_type_id: fuelId, liters, tons, total_sum: totalSum,
+      ttn_number: document.getElementById('bd_ttn').value.trim() || null,
       supplier_name: document.getElementById('bd_supplier').value.trim() || null,
       contract_no: document.getElementById('bd_contract').value.trim() || null,
       photo_path: photoPath,
@@ -2014,11 +2110,16 @@ async function setDispenserFuel(dispenserId, fuelId){
 // ОЙЛИКЛАР — ҳар бир ходим, ойлиги ва тарихи алоҳида. Бир кишининг
 // ойлиги ўзгарса ҳам, эски ойлар ҳисоби ўзгармайди (нарх тарихи каби).
 // ============================================================
-function totalSalaryFor(monthStr){
-  if(!state.employees.length) return 0;
+function employeesForStation(station){
+  return state.employees.filter(e => (e.station||'metan')===station);
+}
+function totalSalaryFor(monthStr, station){
+  station = station || 'metan';
+  const list = employeesForStation(station);
+  if(!list.length) return 0;
   const asOf = monthStr+'-28';
   let total = 0;
-  state.employees.filter(e=>e.active).forEach(emp=>{
+  list.filter(e=>e.active).forEach(emp=>{
     const rows = state.employeeSalaries.filter(s=>s.employee_id===emp.id);
     let best = null;
     rows.forEach(r=>{ if(r.effective_date <= asOf) best = r; });
@@ -2026,10 +2127,11 @@ function totalSalaryFor(monthStr){
   });
   return total;
 }
-function tplSalaries(role){
+function tplSalaries(role, station){
+  station = station || 'metan';
   const canEdit = role==='ceo';
   const monthStr = currentMonthKey();
-  const rows = state.employees.map(emp=>{
+  const rows = employeesForStation(station).map(emp=>{
     const salaries = state.employeeSalaries.filter(s=>s.employee_id===emp.id).sort((a,b)=>a.effective_date.localeCompare(b.effective_date));
     let current = null;
     salaries.forEach(s=>{ if(s.effective_date <= monthStr+'-28') current = s; });
@@ -2044,7 +2146,7 @@ function tplSalaries(role){
         <td>${r.emp.active?'Фаол':'Фаол эмас'}</td>
         ${canEdit?`<td><button class="del" onclick="deleteEmployee('${r.emp.id}')" title="Ўчириш">✕</button></td>`:''}</tr>`).join('') || `<tr><td colspan="${canEdit?5:4}" class="empty">Ҳали ходим киритилмаган</td></tr>`}</tbody></table>
     </div>
-    <div class="tile-row" style="margin-top:10px"><div class="tile"><div class="label">Жорий ой (${monthStr}) — жами иш ҳақи</div><div class="value">${fmt(totalSalaryFor(monthStr))}</div></div></div>
+    <div class="tile-row" style="margin-top:10px"><div class="tile"><div class="label">Жорий ой (${monthStr}) — жами иш ҳақи</div><div class="value">${fmt(totalSalaryFor(monthStr, station))}</div></div></div>
   </div>
   ${!canEdit ? '' : `
   <div class="card group-settings">
@@ -2052,30 +2154,32 @@ function tplSalaries(role){
     <div class="row">
       <div class="field" style="flex:2"><label>Исм-фамилия</label><input type="text" id="emp_name"></div>
       <div class="field"><label>Лавозим</label><input type="text" id="emp_position" placeholder="Оператор / Ҳайдовчи..."></div>
-      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addEmployee()">Қўшиш</button></div>
+      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addEmployee('${station}')">Қўшиш</button></div>
     </div>
   </div>
   <div class="card group-settings">
     <h2>Ойлик белгилаш / ўзгартириш</h2>
-    <p class="hint">Янги қатор қўшсангиз, шу санадан бошлаб амал қилади — эски ойлар эски ставкада қолаверади.</p>
+    <p class="hint">Янги қатор қўшсангиз, шу санадан бошлаб амал қилади — эски ойлар эски ставкада қолаверади. Бирортасининг ойлиги ошса, шу ерга фақат ЯНГИ қатор қўшинг — эски ойлар ҳисоби ўзгармайди, тизимга ҳеч қандай муаммо туғдирмайди.</p>
     <div class="row">
-      <div class="field" style="flex:2"><label>Ходим</label><select id="sal_employee"></select></div>
-      <div class="field"><label>Амал қилиш санаси</label><input type="date" id="sal_date" value="${todayISO()}"></div>
-      <div class="field"><label>Ойлик суммаси</label><input type="number" id="sal_amount"></div>
-      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addEmployeeSalary()">Сақлаш</button></div>
+      <div class="field" style="flex:2"><label>Ходим</label><select id="sal_employee_${station}"></select></div>
+      <div class="field"><label>Амал қилиш санаси</label><input type="date" id="sal_date_${station}" value="${todayISO()}"></div>
+      <div class="field"><label>Ойлик суммаси</label><input type="number" id="sal_amount_${station}"></div>
+      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addEmployeeSalary('${station}')">Сақлаш</button></div>
     </div>
   </div>`}`;
 }
-function afterRenderSalaries(){
-  const sel = document.getElementById('sal_employee');
-  if(sel) sel.innerHTML = state.employees.filter(e=>e.active).map(e=>`<option value="${e.id}">${esc(e.full_name)}</option>`).join('');
+function afterRenderSalaries(station){
+  station = station || 'metan';
+  const sel = document.getElementById('sal_employee_'+station);
+  if(sel) sel.innerHTML = employeesForStation(station).filter(e=>e.active).map(e=>`<option value="${e.id}">${esc(e.full_name)}</option>`).join('');
 }
-async function addEmployee(){
+async function addEmployee(station){
+  station = station || 'metan';
   const name = document.getElementById('emp_name').value.trim();
   if(!name){ toast("Исмни киритинг"); return; }
   const { error } = await sb.from('employees').insert({
     full_name: name, position: document.getElementById('emp_position').value.trim()||null,
-    created_by_name: state.profile.full_name
+    station, created_by_name: state.profile.full_name
   });
   if(error){ toast("Хатолик: "+error.message); return; }
   toast("Қўшилди ✓"); await loadAll(); renderTab();
@@ -2086,10 +2190,11 @@ async function deleteEmployee(id){
   if(error){ toast("Хатолик: "+error.message); return; }
   toast("Ўчирилди ✓"); await loadAll(); renderTab();
 }
-async function addEmployeeSalary(){
-  const employeeId = document.getElementById('sal_employee').value;
-  const date = document.getElementById('sal_date').value;
-  const amount = parseFloat(document.getElementById('sal_amount').value);
+async function addEmployeeSalary(station){
+  station = station || 'metan';
+  const employeeId = document.getElementById('sal_employee_'+station).value;
+  const date = document.getElementById('sal_date_'+station).value;
+  const amount = parseFloat(document.getElementById('sal_amount_'+station).value);
   if(!employeeId || !date || !amount){ toast("Ходим, сана ва суммани киритинг"); return; }
   const { error } = await sb.from('employee_salaries').upsert({
     employee_id: employeeId, effective_date: date, amount, created_by_name: state.profile.full_name
@@ -2124,13 +2229,15 @@ function exportMetanExcel(){
     Sana:p.date, Kompaniya:(state.companies.find(c=>c.id===p.company_id)||{}).name||'', Summa:p.amount, Izoh:p.note, KimKiritgan:p.created_by_name
   })));
   addSheet('Kompaniyalar (balans)', companyTotals('metan').map(c=>({ Nomi:c.name, SotilganM3:c.m3, SotilganSumma:c.sold, Tolangan:c.paid, Balans:c.paid-c.sold })));
-  addSheet('Xodimlar', state.employees.map(e=>({ Ism:e.full_name, Lavozim:e.position, Faol:e.active?'Ha':"Yo'q" })));
-  addSheet('Oyliklar tarixi', state.employeeSalaries.map(s=>({
+  const metanEmployees = employeesForStation('metan');
+  addSheet('Xodimlar', metanEmployees.map(e=>({ Ism:e.full_name, Lavozim:e.position, Faol:e.active?'Ha':"Yo'q" })));
+  addSheet('Oyliklar tarixi', state.employeeSalaries.filter(s=>metanEmployees.some(e=>e.id===s.employee_id)).map(s=>({
     Xodim:(state.employees.find(e=>e.id===s.employee_id)||{}).full_name||'', SanaDan:s.effective_date, Summa:s.amount
   })));
   addSheet('Narxlar', state.prices);
   addSheet('Soliq stavkalari', state.taxRates);
-  addSheet('Doimiy xarajatlar', state.fixedCosts);
+  addSheet('Doimiy xarajatlar', state.fixedCosts.filter(f=>(f.station||'metan')==='metan'));
+  addSheet('Boshqa xarajatlar', state.otherExpenses.filter(e=>(e.station||'metan')==='metan'));
 
   const metanMonths = [...new Set(state.entries.map(e=>e.date && e.date.slice(0,7)).filter(Boolean))].sort();
   addSheet('Oylik hisobot', metanMonths.map(m=>{
@@ -2159,19 +2266,28 @@ function exportBenzinExcel(){
     Korsatkichlar: JSON.stringify(e.readings)
   })));
   addSheet('Benzin qabul qilish', state.benzinDeliveries.map(d=>({
-    Sana:d.date, Turi:fuelTypeName(d.fuel_type_id), Tonna:d.tons, Litr:d.liters, Summa:d.total_sum,
+    Sana:d.date, TTN_raqami:d.ttn_number, Turi:fuelTypeName(d.fuel_type_id), Tonna:d.tons, Litr:d.liters, Summa:d.total_sum,
     Yetkazibberuvchi:d.supplier_name, Shartnoma:d.contract_no, KimQabulQildi:d.received_by_name
   })));
   addSheet('Benzin kompaniya sotuvi', state.benzinCompanySales.map(s=>({
     Kompaniya:(state.companies.find(c=>c.id===s.company_id)||{}).name||'', Turi:fuelTypeName(s.fuel_type_id), Litr:s.liters, Narx:s.price, Summa:s.sum
   })));
-  addSheet('Benzin narxlari', state.fuelPrices.map(p=>({ Turi:fuelTypeName(p.fuel_type_id), SanaDan:p.effective_date, Sotuv:p.sale_price, Tannarx:p.cost_price, Aksiz:p.excise })));
+  addSheet('Benzin narxlari', state.fuelPrices.map(p=>({ Turi:fuelTypeName(p.fuel_type_id), SanaDan:p.effective_date, Sotuv:p.sale_price, Aksiz:p.excise })));
   addSheet('Zahira holati', benzinStockSummary().map(s=>({ Turi:s.fuelType.name, JamiKelgan:s.delivered, JamiSotilgan:s.sold, HisobiyQoldiq:s.balance })));
+  const benzinEmployees = employeesForStation('benzin');
+  addSheet('Benzin xodimlar', benzinEmployees.map(e=>({ Ism:e.full_name, Lavozim:e.position, Faol:e.active?'Ha':"Yo'q" })));
+  addSheet('Benzin oyliklar tarixi', state.employeeSalaries.filter(s=>benzinEmployees.some(e=>e.id===s.employee_id)).map(s=>({
+    Xodim:(state.employees.find(e=>e.id===s.employee_id)||{}).full_name||'', SanaDan:s.effective_date, Summa:s.amount
+  })));
+  addSheet('Benzin doimiy xarajatlar', state.fixedCosts.filter(f=>(f.station||'metan')==='benzin').map(f=>({ SanaDan:f.effective_date, Elektr:f.electricity_tariff, KimKiritgan:f.created_by_name })));
+  addSheet('Benzin boshqa xarajatlar', state.otherExpenses.filter(e=>(e.station||'metan')==='benzin'));
 
   const benzinMonths = [...new Set(state.benzinEntries.map(e=>e.date && e.date.slice(0,7)).filter(Boolean))].sort();
-  addSheet('Oylik hisobot (yalpi foyda)', benzinMonths.map(m=>{
+  addSheet('Oylik hisobot (soff foyda)', benzinMonths.map(m=>{
     const pl = computeBenzinMonthlyPL(m);
-    return { Oy:m, Daromad:pl.revenue, Tannarx:pl.cogs, Aksiz:pl.excise, NDS_netto:pl.ndsNet, YalpiFoyda:pl.grossProfit };
+    return { Oy:m, Daromad:pl.revenue, Tannarx:pl.cogs, Elektr:pl.electricity, IshHaqi:pl.salary, BoshqaXarajat:pl.otherExp,
+      Aksiz:pl.excise, NDS_netto:pl.ndsNet, IjtimoiySoliq:pl.socialAmount, YalpiFoyda:pl.grossProfit,
+      FoydaSoligi:pl.profitTaxAmount, SofFoyda:pl.netProfit };
   }));
 
   XLSX.writeFile(wb, `Mangit_Benzin_${todayISO()}.xlsx`);
