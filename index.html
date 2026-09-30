@@ -566,15 +566,19 @@ function computeMonthlyPL(monthStr){
   const excise = soldM3Total * pr.excise;
 
   const fc = fixedCostFor(monthStr+'-01');
-  const electricity = Number(fc.electricity_tariff)||0; // shu oyning JAMI elektr xarajati (so'm)
+  // Электр учун Агрес каби "аниқ истеъмол" ўлчагичи йўқ (газдан фарқли
+  // равишда) — шунинг учун электр харажати сифатида шу ойда ТЎЛАНГАН
+  // препеймент (Ток) суммасининг ўзи олинади. Агар шу ой учун препеймент
+  // ёзуви бўлмаса (тарихий ойлар), Созламалардаги қўлда киритилган
+  // ойлик жами қиймат fallback сифатида ишлатилади.
+  const prepayGaz = state.prepayments.filter(p=>p.month && p.month.slice(0,7)===monthStr && p.kind==='gaz').reduce((s,p)=>s+Number(p.amount||0),0);
+  const prepayTok = state.prepayments.filter(p=>p.month && p.month.slice(0,7)===monthStr && p.kind==='tok').reduce((s,p)=>s+Number(p.amount||0),0);
+  const electricity = prepayTok || Number(fc.electricity_tariff)||0;
   const salary = Number(fc.salary)||0;
   const bank = Number(fc.bank_loan_interest)||0;
   const land = Number(fc.land_property_tax)||0;
   const otherExp = state.otherExpenses.filter(e=>e.date && e.date.slice(0,7)===monthStr).reduce((s,e)=>s+Number(e.amount||0),0);
   const expensesTotal = cogsGas + electricity + salary + bank + otherExp;
-
-  const prepayGaz = state.prepayments.filter(p=>p.month && p.month.slice(0,7)===monthStr && p.kind==='gaz').reduce((s,p)=>s+Number(p.amount||0),0);
-  const prepayTok = state.prepayments.filter(p=>p.month && p.month.slice(0,7)===monthStr && p.kind==='tok').reduce((s,p)=>s+Number(p.amount||0),0);
 
   const tax = taxFor(monthStr+'-01');
   const ndsRate = Number(tax.nds_rate)||0;
@@ -603,7 +607,7 @@ function renderPL(){
     ${row('Сотув суммаси (жами)', fmt(pl.revenue)+" сўм")}
     <div class="pl-group-title">Харажатлар</div>
     ${row('Табиий газ (харид, Агрес асосида)', fmt(pl.cogsGas)+" сўм", {indent:true})}
-    ${row('Электр энергияси', fmt(pl.electricity)+" сўм", {indent:true})}
+    ${row('Электр энергияси (шу ойги препеймент)', fmt(pl.electricity)+" сўм", {indent:true})}
     ${row('Иш ҳақи', fmt(pl.salary)+" сўм", {indent:true})}
     ${row('Банк кредити ва фоиз', fmt(pl.bank)+" сўм", {indent:true})}
     ${row('Бошқа харажатлар', fmt(pl.otherExp)+" сўм", {indent:true})}
@@ -619,7 +623,7 @@ function renderPL(){
     ${row('= Фойда', fmt(pl.profitBeforeTax)+" сўм", {bold:true})}
     ${row('− Фойда солиғи ('+pct(pl.tax.profit_tax_rate)+')', fmt(pl.profitTaxAmount)+" сўм", {indent:true})}
     ${row('= СОФ ФОЙДА', fmt(pl.netProfit)+" сўм", {bold:true, cls: pl.netProfit<0?'bad-text':'good-text'})}
-    <div class="hint" style="margin-top:10px">Препеймент (шу ой): Газ — ${fmt(pl.prepayGaz)} сўм, Ток — ${fmt(pl.prepayTok)} сўм (булар келгуси харажатлар учун олдиндан тўлов — юқоридаги ҳисобга алоҳида қўшилмайди, "Харажатлар" бўлимида кўринади).</div>`;
+    <div class="hint" style="margin-top:10px">Газ препеймент (шу ой тўланган): ${fmt(pl.prepayGaz)} сўм — бу фақат касса оқими, юқоридаги "Табиий газ" харажати эса Агрес (реал истеъмол) асосида ҳисобланади, шунга кўра иккиси турли рақам бўлиши мумкин. Электр препеймент эса аниқ истеъмол ўлчагичи йўқлиги сабабли тўғридан-тўғри шу ойнинг харажати сифатида юқорида ҳисобга олинган.</div>`;
 }
 
 function tplOverview(){
