@@ -121,6 +121,7 @@ let state = {
   entries: [], deliveries: [], payments: []
 };
 let pending = { deliveries: [] };
+let benzinPending = { sales: [] };
 let activeTab = null;
 
 const fmt = n => (n===null||n===undefined||isNaN(n)) ? '—' : Math.round(n).toLocaleString('en-US').replace(/,/g,' ');
@@ -138,7 +139,8 @@ async function boot(){
   if(session){ await afterLogin(session); } else { renderLogin(); }
 
   sb.auth.onAuthStateChange((event, session)=>{
-    if(event === 'SIGNED_OUT'){ state = {session:null, profile:null, companies:[],prices:[],taxRates:[],fixedCosts:[],prepayments:[],otherExpenses:[],entries:[],deliveries:[],payments:[]}; renderLogin(); }
+    if(event === 'SIGNED_OUT'){ state = {session:null, profile:null, companies:[],prices:[],taxRates:[],fixedCosts:[],prepayments:[],otherExpenses:[],entries:[],deliveries:[],payments:[],
+      fuelTypes:[],fuelPrices:[],dispensers:[],benzinEntries:[],benzinCompanySales:[],benzinDeliveries:[],employees:[],employeeSalaries:[]}; renderLogin(); }
   });
 }
 
@@ -186,7 +188,9 @@ async function afterLogin(session){
 // DATA LOADING
 // ============================================================
 async function loadAll(){
-  const [companies, prices, taxRates, fixedCosts, prepayments, otherExpenses, entries, deliveries, payments] = await Promise.all([
+  const [companies, prices, taxRates, fixedCosts, prepayments, otherExpenses, entries, deliveries, payments,
+    fuelTypes, fuelPrices, dispensers, benzinEntries, benzinCompanySales, benzinDeliveries,
+    employees, employeeSalaries] = await Promise.all([
     sb.from('companies').select('*').order('name'),
     sb.from('prices').select('*').order('effective_date'),
     sb.from('tax_rates').select('*').order('effective_date'),
@@ -196,6 +200,14 @@ async function loadAll(){
     sb.from('entries').select('*').order('date', {ascending:false}).limit(400),
     sb.from('deliveries').select('*, entries(price,date)'),
     sb.from('payments').select('*, entries(date)').order('created_at', {ascending:false}),
+    sb.from('fuel_types').select('*').order('name'),
+    sb.from('fuel_prices').select('*').order('effective_date'),
+    sb.from('dispensers').select('*').order('sort_order'),
+    sb.from('benzin_entries').select('*').order('date', {ascending:false}).limit(400),
+    sb.from('benzin_company_sales').select('*'),
+    sb.from('benzin_deliveries').select('*').order('date', {ascending:false}),
+    sb.from('employees').select('*').order('full_name'),
+    sb.from('employee_salaries').select('*').order('effective_date'),
   ]);
   state.companies = companies.data || [];
   state.prices = prices.data || [];
@@ -206,6 +218,14 @@ async function loadAll(){
   state.entries = entries.data || [];
   state.deliveries = deliveries.data || [];
   state.payments = payments.data || [];
+  state.fuelTypes = fuelTypes.data || [];
+  state.fuelPrices = fuelPrices.data || [];
+  state.dispensers = dispensers.data || [];
+  state.benzinEntries = benzinEntries.data || [];
+  state.benzinCompanySales = benzinCompanySales.data || [];
+  state.benzinDeliveries = benzinDeliveries.data || [];
+  state.employees = employees.data || [];
+  state.employeeSalaries = employeeSalaries.data || [];
 }
 
 function priceFor(dateStr){
@@ -250,9 +270,9 @@ function companyTotals(){
 // SHELL / TABS
 // ============================================================
 function tabsForRole(role){
-  if(role === 'operator') return [['entry','Кунлик ҳисобот']];
-  if(role === 'direktor') return [['overview','Умумий'],['reports','Ҳисоботлар'],['davlat','Давлат ҳисоботи'],['companies','Компаниялар'],['expenses','Харажатлар']];
-  return [['entry','Кунлик ҳисобот'],['overview','Умумий'],['reports','Ҳисоботлар'],['davlat','Давлат ҳисоботи'],['companies','Компаниялар'],['expenses','Харажатлар'],['settings','Созламалар']];
+  if(role === 'operator') return [['entry','Кунлик ҳисобот (метан)'],['benzin','Бензин']];
+  if(role === 'direktor') return [['overview','Умумий'],['reports','Ҳисоботлар'],['davlat','Давлат ҳисоботи'],['companies','Компаниялар'],['expenses','Харажатлар'],['benzin','Бензин'],['salaries','Ойликлар']];
+  return [['entry','Кунлик ҳисобот (метан)'],['overview','Умумий'],['reports','Ҳисоботлар'],['davlat','Давлат ҳисоботи'],['companies','Компаниялар'],['expenses','Харажатлар'],['benzin','Бензин'],['salaries','Ойликлар'],['settings','Созламалар']];
 }
 
 function renderShell(){
@@ -283,12 +303,20 @@ function renderTab(){
   else if(activeTab==='companies') body.innerHTML = tplCompanies(role);
   else if(activeTab==='expenses') body.innerHTML = tplExpenses(role);
   else if(activeTab==='settings') body.innerHTML = tplSettings();
+  else if(activeTab==='benzin') body.innerHTML = tplBenzin(role);
+  else if(activeTab==='salaries') body.innerHTML = tplSalaries(role);
   afterRenderTab();
 }
 function afterRenderTab(){
   if(activeTab==='entry'){
     buildPumpFields(); buildCompanySelects(); renderPendingLists(); recalcPreview();
     document.getElementById('f_date').value = todayISO();
+  }
+  if(activeTab==='benzin'){
+    afterRenderBenzin();
+  }
+  if(activeTab==='salaries'){
+    afterRenderSalaries();
   }
   if(activeTab==='reports'){
     document.getElementById('rep_date').addEventListener('change', renderReportDetail);
@@ -303,6 +331,7 @@ function afterRenderTab(){
   if(activeTab==='overview'){
     renderPL();
     document.getElementById('pl_month').addEventListener('change', renderPL);
+    renderOverviewCharts();
   }
 }
 
@@ -311,12 +340,14 @@ function afterRenderTab(){
 // ============================================================
 function tplEntry(){
   return `
+  ${lowBalanceCardHtml()}
   <div class="card">
     <div class="section-title"><h2>Бугунги ҳисобот</h2></div>
     <div class="row">
       <div class="field"><label>Сана</label><input type="date" id="f_date"></div>
-      <div class="field"><label>Оператор исми</label><input type="text" id="f_operator" placeholder="Жаҳонгир / Сардор"></div>
+      <div class="field"><label>Оператор</label><input type="text" id="f_operator" value="${esc(state.profile.full_name)}" disabled></div>
     </div>
+    <p class="hint">Оператор исми сизнинг ҳисобингиздан автоматик олинади — ким киритганини аниқ билиш учун.</p>
   </div>
   <div class="card">
     <h2>Помпалар — ҳозирги кўрсаткич (m3)</h2>
@@ -574,7 +605,11 @@ function computeMonthlyPL(monthStr){
   const prepayGaz = state.prepayments.filter(p=>p.month && p.month.slice(0,7)===monthStr && p.kind==='gaz').reduce((s,p)=>s+Number(p.amount||0),0);
   const prepayTok = state.prepayments.filter(p=>p.month && p.month.slice(0,7)===monthStr && p.kind==='tok').reduce((s,p)=>s+Number(p.amount||0),0);
   const electricity = prepayTok || Number(fc.electricity_tariff)||0;
-  const salary = Number(fc.salary)||0;
+  // Иш ҳақи — ХОДИМЛАР рўйхатидан (ҳар бирининг ойлиги алоҳида, тарихи
+  // билан) ҳисобланади. Агар ҳали ходим киритилмаган бўлса (масалан эски
+  // импорт қилинган ойлар), эски Доимий харажатлардаги якка рақамга
+  // fallback қилинади.
+  const salary = totalSalaryFor(monthStr) || Number(fc.salary)||0;
   const bank = Number(fc.bank_loan_interest)||0;
   const land = Number(fc.land_property_tax)||0;
   const otherExp = state.otherExpenses.filter(e=>e.date && e.date.slice(0,7)===monthStr).reduce((s,e)=>s+Number(e.amount||0),0);
@@ -640,10 +675,95 @@ function tplOverview(){
     <div class="tile"><div class="label">Жорий сотув нархи</div><div class="value">${fmt(priceFor(todayISO()).sale_price)} сўм/m3</div></div>
   </div>
 
+  <div class="card">
+    <div class="section-title"><h2>Ойлар кесимида савдо (сотув суммаси)</h2></div>
+    <div id="chartMonthly"></div>
+  </div>
+  <div class="card">
+    <div class="section-title"><h2>Сўнгги 30 кун — кунлик сотилган m3</h2></div>
+    <div id="chartDaily"></div>
+  </div>
+
   <div class="card group-income">
     <div class="section-title"><h2>Ойлик даромад ҳисоботи</h2><input type="month" id="pl_month" value="${currentMonthKey()}" style="width:auto"></div>
     <div id="plDetail"></div>
   </div>`;
+}
+
+// ============================================================
+// CHARTS — small inline-SVG bar/line charts, no external library.
+// Single series each, so no legend needed (title names the series);
+// axis/grid stay muted, the mark itself carries the accent color.
+// ============================================================
+function monthlySalesSeries(){
+  const byMonth = {};
+  state.entries.forEach(e=>{
+    if(!e.date) return;
+    const m = e.date.slice(0,7);
+    byMonth[m] = (byMonth[m]||0) + (Number(e.sales_value)||0);
+  });
+  const months = Object.keys(byMonth).sort().slice(-12);
+  return months.map(m=>({label:m.slice(2), value:byMonth[m]}));
+}
+function dailySoldSeries(){
+  return state.entries.slice(0,30).slice().reverse()
+    .map(e=>({label:e.date.slice(5), value:Number(e.sold_m3)||0}));
+}
+function svgBarChart(points, opts={}){
+  const w=760,h=200,padL=54,padR=12,padT=10,padB=28;
+  const innerW=w-padL-padR, innerH=h-padT-padB;
+  if(!points.length) return `<p class="empty">Маълумот йўқ</p>`;
+  const max = Math.max(...points.map(p=>p.value), 1);
+  const bw = innerW/points.length;
+  const bars = points.map((p,i)=>{
+    const bh = max>0 ? (p.value/max)*innerH : 0;
+    const x = padL + i*bw + bw*0.15;
+    const y = padT + innerH - bh;
+    const bwReal = bw*0.7;
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bwReal.toFixed(1)}" height="${Math.max(bh,1).toFixed(1)}" rx="3" fill="var(--accent)"><title>${esc(p.label)}: ${fmt(p.value)}${opts.unit||''}</title></rect>`;
+  }).join('');
+  const labels = points.map((p,i)=>{
+    if(points.length>8 && i%2!==0) return '';
+    const x = padL + i*bw + bw/2;
+    return `<text x="${x.toFixed(1)}" y="${h-8}" font-size="10" fill="var(--muted)" text-anchor="middle">${esc(p.label)}</text>`;
+  }).join('');
+  const gridY = padT + innerH;
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;display:block">
+    <line x1="${padL}" y1="${gridY}" x2="${w-padR}" y2="${gridY}" stroke="var(--border)" stroke-width="1"/>
+    <text x="${padL-6}" y="${padT+4}" font-size="10" fill="var(--muted)" text-anchor="end">${fmt(max)}</text>
+    ${bars}${labels}
+  </svg>`;
+}
+function svgLineChart(points, opts={}){
+  const w=760,h=200,padL=54,padR=12,padT=10,padB=28;
+  const innerW=w-padL-padR, innerH=h-padT-padB;
+  if(!points.length) return `<p class="empty">Маълумот йўқ</p>`;
+  const max = Math.max(...points.map(p=>p.value), 1);
+  const step = points.length>1 ? innerW/(points.length-1) : 0;
+  const coords = points.map((p,i)=>{
+    const x = padL + i*step;
+    const y = padT + innerH - (max>0 ? (p.value/max)*innerH : 0);
+    return {x,y,p};
+  });
+  const path = coords.map((c,i)=> (i===0?'M':'L')+c.x.toFixed(1)+' '+c.y.toFixed(1)).join(' ');
+  const dots = coords.map(c=>`<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="2.5" fill="var(--accent)"><title>${esc(c.p.label)}: ${fmt(c.p.value)}${opts.unit||''}</title></circle>`).join('');
+  const labels = coords.map((c,i)=>{
+    if(points.length>10 && i%3!==0) return '';
+    return `<text x="${c.x.toFixed(1)}" y="${h-8}" font-size="10" fill="var(--muted)" text-anchor="middle">${esc(c.p.label)}</text>`;
+  }).join('');
+  const gridY = padT + innerH;
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;display:block">
+    <line x1="${padL}" y1="${gridY}" x2="${w-padR}" y2="${gridY}" stroke="var(--border)" stroke-width="1"/>
+    <text x="${padL-6}" y="${padT+4}" font-size="10" fill="var(--muted)" text-anchor="end">${fmt(max)}</text>
+    <path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2"/>
+    ${dots}${labels}
+  </svg>`;
+}
+function renderOverviewCharts(){
+  const mBox = document.getElementById('chartMonthly');
+  const dBox = document.getElementById('chartDaily');
+  if(mBox) mBox.innerHTML = svgBarChart(monthlySalesSeries(), {unit:' сўм'});
+  if(dBox) dBox.innerHTML = svgLineChart(dailySoldSeries(), {unit:' m3'});
 }
 
 // ============================================================
@@ -797,6 +917,22 @@ function balanceLabel(bal){
   if(bal < 1500000) return 'Кузатиб туринг';
   return 'Яхши';
 }
+// Operator-facing read-only card: shown at the top of the daily-entry
+// form so operators can see which companies are running low and warn
+// the driver/client before pumping, without giving them any access to
+// balances/payments editing (that stays CEO-only).
+function lowBalanceCardHtml(){
+  const low = companyTotals().filter(c => c.balance < 1500000).sort((a,b)=>a.balance-b.balance);
+  if(!low.length) return '';
+  return `
+  <div class="card">
+    <div class="section-title"><h2>⚠ Балансi кам компаниялар</h2></div>
+    <p class="hint">Мижозни огоҳлантиринг — балансни тўлдиришлари керак.</p>
+    <div class="table-wrap"><table><thead><tr><th>Компания</th><th>Баланс</th></tr></thead>
+      <tbody>${low.map(c=>`<tr><td>${esc(c.name)}</td><td><span class="pill ${balanceTier(c.balance)}">${fmt(c.balance)} сўм — ${balanceLabel(c.balance)}</span></td></tr>`).join('')}</tbody>
+    </table></div>
+  </div>`;
+}
 
 function tplCompanies(role){
   const totals = companyTotals().sort((a,b)=>a.name.localeCompare(b.name));
@@ -834,11 +970,11 @@ function tplCompanies(role){
       <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addCompanyPayment()">Қўшиш</button></div>
     </div>
     <div class="table-wrap" style="margin-top:12px">
-      <table><thead><tr><th>Сана</th><th>Компания</th><th>Сумма</th><th>Изоҳ</th><th></th></tr></thead>
+      <table><thead><tr><th>Сана</th><th>Компания</th><th>Сумма</th><th>Изоҳ</th><th>Ким киритган</th><th></th></tr></thead>
       <tbody>${recentPayments.map(p=>
-        `<tr><td>${p.date||''}</td><td>${esc(companyName(p.company_id))}</td><td>${fmt(p.amount)}</td><td>${esc(p.note||'')}</td>
+        `<tr><td>${p.date||''}</td><td>${esc(companyName(p.company_id))}</td><td>${fmt(p.amount)}</td><td>${esc(p.note||'')}</td><td class="hint">${esc(p.created_by_name||'—')}</td>
           <td><button class="del" onclick="deleteCompanyPayment('${p.id}')" title="Ўчириш">✕</button></td></tr>`
-      ).join('') || `<tr><td colspan="5" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
+      ).join('') || `<tr><td colspan="6" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
     </div>
   </div>
   <div class="card group-settings">
@@ -866,7 +1002,8 @@ async function addCompanyPayment(){
   if(!companyId || !amount){ toast("Компания ва суммани киритинг"); return; }
   const { error } = await sb.from('payments').insert({
     company_id: companyId, amount, date,
-    note: document.getElementById('cp_note').value.trim() || null
+    note: document.getElementById('cp_note').value.trim() || null,
+    created_by_name: state.profile.full_name
   });
   if(error){ toast("Хатолик: "+error.message); return; }
   toast("Баланс янгиланди ✓");
@@ -886,7 +1023,8 @@ async function addCompany(){
     name,
     seed_m3: parseFloat(document.getElementById('nc_m3').value)||0,
     seed_sold: parseFloat(document.getElementById('nc_sold').value)||0,
-    seed_paid: parseFloat(document.getElementById('nc_paid').value)||0
+    seed_paid: parseFloat(document.getElementById('nc_paid').value)||0,
+    created_by_name: state.profile.full_name
   });
   if(error){ toast("Хатолик: "+error.message); return; }
   toast("Компания қўшилди ✓");
@@ -909,11 +1047,11 @@ function tplExpenses(role){
   <div class="card group-expense">
     <div class="section-title"><h2>Препеймент (Газ / Ток)</h2></div>
     <div class="table-wrap">
-      <table><thead><tr><th>Ой</th><th>Тури</th><th>Сумма</th><th>Изоҳ</th>${canEdit?'<th></th>':''}</tr></thead>
+      <table><thead><tr><th>Ой</th><th>Тури</th><th>Сумма</th><th>Изоҳ</th><th>Ким киритган</th>${canEdit?'<th></th>':''}</tr></thead>
       <tbody>${state.prepayments.map(p=>
-        `<tr><td>${p.month}</td><td>${p.kind==='gaz'?'Газ':'Ток'}</td><td>${fmt(p.amount)}</td><td>${esc(p.note||'')}</td>
+        `<tr><td>${p.month}</td><td>${p.kind==='gaz'?'Газ':'Ток'}</td><td>${fmt(p.amount)}</td><td>${esc(p.note||'')}</td><td class="hint">${esc(p.created_by_name||'—')}</td>
           ${canEdit?`<td><button class="del" onclick="deletePrepayment('${p.id}')">✕</button></td>`:''}</tr>`
-      ).join('') || `<tr><td colspan="${canEdit?5:4}" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
+      ).join('') || `<tr><td colspan="${canEdit?6:5}" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
     </div>
     ${canEdit ? `<div class="row" style="margin-top:10px">
       <div class="field"><label>Ой</label><input type="month" id="pp_month"></div>
@@ -927,11 +1065,11 @@ function tplExpenses(role){
   <div class="card group-expense">
     <div class="section-title"><h2>Бошқа харажатлар</h2></div>
     <div class="table-wrap">
-      <table><thead><tr><th>Сана</th><th>Тавсиф</th><th>Сумма</th>${canEdit?'<th></th>':''}</tr></thead>
+      <table><thead><tr><th>Сана</th><th>Тавсиф</th><th>Сумма</th><th>Ким киритган</th>${canEdit?'<th></th>':''}</tr></thead>
       <tbody>${state.otherExpenses.map(e=>
-        `<tr><td>${e.date}</td><td>${esc(e.description)}</td><td>${fmt(e.amount)}</td>
+        `<tr><td>${e.date}</td><td>${esc(e.description)}</td><td>${fmt(e.amount)}</td><td class="hint">${esc(e.created_by_name||'—')}</td>
           ${canEdit?`<td><button class="del" onclick="deleteOtherExpense('${e.id}')">✕</button></td>`:''}</tr>`
-      ).join('') || `<tr><td colspan="${canEdit?4:3}" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
+      ).join('') || `<tr><td colspan="${canEdit?5:4}" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
     </div>
     ${canEdit ? `<div class="row" style="margin-top:10px">
       <div class="field"><label>Сана</label><input type="date" id="oe_date" value="${todayISO()}"></div>
@@ -947,7 +1085,8 @@ async function addPrepayment(){
   const { error } = await sb.from('prepayments').upsert({
     month: monthVal+'-01', kind: document.getElementById('pp_kind').value,
     amount: parseFloat(document.getElementById('pp_amount').value)||0,
-    note: document.getElementById('pp_note').value.trim()||null
+    note: document.getElementById('pp_note').value.trim()||null,
+    created_by_name: state.profile.full_name
   }, { onConflict: 'month,kind' });
   if(error){ toast("Хатолик: "+error.message); return; }
   toast("Сақланди ✓"); await loadAll(); renderTab();
@@ -968,7 +1107,8 @@ async function addOtherExpense(){
   const { error } = await sb.from('other_expenses').insert({
     date: document.getElementById('oe_date').value,
     description: document.getElementById('oe_desc').value.trim(),
-    amount: parseFloat(document.getElementById('oe_amount').value)||0
+    amount: parseFloat(document.getElementById('oe_amount').value)||0,
+    created_by_name: state.profile.full_name
   });
   if(error){ toast("Хатолик: "+error.message); return; }
   toast("Сақланди ✓"); await loadAll(); renderTab();
@@ -981,8 +1121,8 @@ function tplSettings(){
   return `
   <div class="card group-settings">
     <div class="section-title"><h2>Нарх тарихи (Сотув / Таннарх / Акциз / Йўқотиш коэффициенти)</h2></div>
-    <div class="table-wrap"><table><thead><tr><th>Сана (дан)</th><th>Сотув</th><th>Таннарх</th><th>Акциз</th><th>Йўқотиш коэфф.</th></tr></thead>
-      <tbody>${state.prices.map(p=>`<tr><td>${p.effective_date}</td><td>${fmt(p.sale_price)}</td><td>${fmt(p.cost_price)}</td><td>${fmt(p.excise)}</td><td>${p.loss_coefficient}</td></tr>`).join('')}</tbody></table></div>
+    <div class="table-wrap"><table><thead><tr><th>Сана (дан)</th><th>Сотув</th><th>Таннарх</th><th>Акциз</th><th>Йўқотиш коэфф.</th><th>Ким киритган</th></tr></thead>
+      <tbody>${state.prices.map(p=>`<tr><td>${p.effective_date}</td><td>${fmt(p.sale_price)}</td><td>${fmt(p.cost_price)}</td><td>${fmt(p.excise)}</td><td>${p.loss_coefficient}</td><td class="hint">${esc(p.created_by_name||'—')}</td></tr>`).join('')}</tbody></table></div>
     <div class="confirm-wrap">
       <p class="hint">⚠️ Бу узоқ муддат ўзгармайдиган рақам. Фақат нарх ҳақиқатан ҳам ўзгарган кунда янги қатор қўшинг — эски кунлар эски нархда ҳисобланаверади. Йўқотиш коэффициенти — "Давлат ҳисоботи"да Агрес кўрсаткичини давлат ҳисобига мослаштириш учун ишлатилади (эски тизимда доим 0.986 бўлган).</p>
       <div class="row">
@@ -999,8 +1139,8 @@ function tplSettings(){
 
   <div class="card group-tax">
     <div class="section-title"><h2>Солиқ ставкалари тарихи</h2></div>
-    <div class="table-wrap"><table><thead><tr><th>Сана (дан)</th><th>НДС</th><th>Ижтимоий</th><th>Фойда</th></tr></thead>
-      <tbody>${state.taxRates.map(t=>`<tr><td>${t.effective_date}</td><td>${pct(t.nds_rate)}</td><td>${pct(t.social_tax_rate)}</td><td>${pct(t.profit_tax_rate)}</td></tr>`).join('')}</tbody></table></div>
+    <div class="table-wrap"><table><thead><tr><th>Сана (дан)</th><th>НДС</th><th>Ижтимоий</th><th>Фойда</th><th>Ким киритган</th></tr></thead>
+      <tbody>${state.taxRates.map(t=>`<tr><td>${t.effective_date}</td><td>${pct(t.nds_rate)}</td><td>${pct(t.social_tax_rate)}</td><td>${pct(t.profit_tax_rate)}</td><td class="hint">${esc(t.created_by_name||'—')}</td></tr>`).join('')}</tbody></table></div>
     <div class="confirm-wrap">
       <div class="row">
         <div class="field"><label>Амал қилиш санаси</label><input type="date" id="tx_date"></div>
@@ -1016,8 +1156,8 @@ function tplSettings(){
   <div class="card group-settings">
     <div class="section-title"><h2>Доимий харажатлар (Иш ҳақи / Банк кредити / Ер-мулк солиғи / Электр)</h2></div>
     <p class="hint">Электр — шу ойнинг ЖАМИ электр харажати (сўмда), тарифи эмас. Ҳар ой электр ҳисоби келгач, шу ерга шу ойнинг умумий суммасини янги қатор қилиб қўшинг — акс ҳолда "Ойлик даромад ҳисоботи"да электр харажати 0 (ёки эскирган) кўринади.</p>
-    <div class="table-wrap"><table><thead><tr><th>Сана (дан)</th><th>Иш ҳақи</th><th>Банк кредити</th><th>Ер-мулк</th><th>Электр (ойлик, жами)</th></tr></thead>
-      <tbody>${state.fixedCosts.map(f=>`<tr><td>${f.effective_date}</td><td>${fmt(f.salary)}</td><td>${fmt(f.bank_loan_interest)}</td><td>${fmt(f.land_property_tax)}</td><td>${fmt(f.electricity_tariff)}</td></tr>`).join('')}</tbody></table></div>
+    <div class="table-wrap"><table><thead><tr><th>Сана (дан)</th><th>Иш ҳақи</th><th>Банк кредити</th><th>Ер-мулк</th><th>Электр (ойлик, жами)</th><th>Ким киритган</th></tr></thead>
+      <tbody>${state.fixedCosts.map(f=>`<tr><td>${f.effective_date}</td><td>${fmt(f.salary)}</td><td>${fmt(f.bank_loan_interest)}</td><td>${fmt(f.land_property_tax)}</td><td>${fmt(f.electricity_tariff)}</td><td class="hint">${esc(f.created_by_name||'—')}</td></tr>`).join('')}</tbody></table></div>
     <div class="confirm-wrap">
       <div class="row">
         <div class="field"><label>Амал қилиш санаси</label><input type="date" id="fc_date"></div>
@@ -1038,7 +1178,8 @@ async function addPrice(){
     sale_price: parseFloat(document.getElementById('np_sale').value),
     cost_price: parseFloat(document.getElementById('np_cost').value),
     excise: parseFloat(document.getElementById('np_excise').value),
-    loss_coefficient: parseFloat(document.getElementById('np_loss').value)||0.986
+    loss_coefficient: parseFloat(document.getElementById('np_loss').value)||0.986,
+    created_by_name: state.profile.full_name
   }, {onConflict:'effective_date'});
   if(error){ toast("Хатолик: "+error.message); return; }
   toast("Нарх қўшилди ✓"); await loadAll(); renderTab();
@@ -1049,7 +1190,8 @@ async function addTaxRate(){
     effective_date: document.getElementById('tx_date').value,
     nds_rate: parseFloat(document.getElementById('tx_nds').value)/100,
     social_tax_rate: parseFloat(document.getElementById('tx_social').value)/100,
-    profit_tax_rate: parseFloat(document.getElementById('tx_profit').value)/100
+    profit_tax_rate: parseFloat(document.getElementById('tx_profit').value)/100,
+    created_by_name: state.profile.full_name
   }, {onConflict:'effective_date'});
   if(error){ toast("Хатолик: "+error.message); return; }
   toast("Ставка қўшилди ✓"); await loadAll(); renderTab();
@@ -1061,10 +1203,612 @@ async function addFixedCost(){
     salary: parseFloat(document.getElementById('fc_salary').value)||0,
     bank_loan_interest: parseFloat(document.getElementById('fc_bank').value)||0,
     land_property_tax: parseFloat(document.getElementById('fc_land').value)||0,
-    electricity_tariff: parseFloat(document.getElementById('fc_elec').value)||0
+    electricity_tariff: parseFloat(document.getElementById('fc_elec').value)||0,
+    created_by_name: state.profile.full_name
   }, {onConflict:'effective_date'});
   if(error){ toast("Хатолик: "+error.message); return; }
   toast("Қиймат қўшилди ✓"); await loadAll(); renderTab();
+}
+
+// ============================================================
+// БЕНЗИН — алоҳида модуль (метандан фарқли: калонкалар кўп маҳсулот
+// сота олади, физик заҳира бор, ёқилғи тури кўпайиши мумкин).
+// Компаниялар (companies) жадвали МЕТАН БИЛАН БИР ХИЛ — бир компания
+// ҳам газ, ҳам бензин олиши мумкин, баланси умумий ҳисобланади.
+// ============================================================
+function fuelTypeName(id){ return (state.fuelTypes.find(f=>f.id===id)||{}).name || '—'; }
+// Тўлиқ нарх қатори (сотув/таннарх/акциз) — ойлик ҳисоб-китоб учун.
+function fuelPriceRowFor(fuelTypeId, dateStr){
+  const rows = state.fuelPrices.filter(p=>p.fuel_type_id===fuelTypeId);
+  let best = rows[0] || {sale_price:0, cost_price:0, excise:0};
+  rows.forEach(p=>{ if(p.effective_date <= dateStr) best = p; });
+  return best;
+}
+function fuelPriceFor(fuelTypeId, dateStr){ return fuelPriceRowFor(fuelTypeId, dateStr).sale_price; }
+// Бугунги санагача бўлган энг сўнгги ёзувдаги шу калонканинг кўрсаткичи —
+// метандаги pumpBaseline() билан бир хил мантиқ.
+function dispenserBaseline(dispenserId){
+  for(const e of state.benzinEntries){
+    const r = (e.readings||{})[dispenserId];
+    if(r !== undefined && r !== null) return Number(r);
+  }
+  return 0;
+}
+// Барча кунлар бўйича хронологик тартибда сотилган литрни ҳисоблайди
+// (ҳар калонка учун кетма-кет фарқ), кейин ёқилғи тури бўйича жамлайди.
+// Заҳира (стоk) ва ойлик/умумий ҳисоботлар шундан фойдаланади.
+function benzinComputeAll(){
+  const asc = state.benzinEntries.slice().sort((a,b)=> a.date < b.date ? -1 : (a.date > b.date ? 1 : 0));
+  const lastReading = {};
+  const result = {};
+  asc.forEach(e=>{
+    const soldByFuel = {};
+    let revenue = 0;
+    state.dispensers.forEach(d=>{
+      const reading = (e.readings||{})[d.id];
+      if(reading === undefined || reading === null) return;
+      const r = Number(reading);
+      const prev = lastReading[d.id] !== undefined ? lastReading[d.id] : r;
+      const sold = r - prev;
+      if(d.fuel_type_id) soldByFuel[d.fuel_type_id] = (soldByFuel[d.fuel_type_id]||0) + sold;
+      lastReading[d.id] = r;
+    });
+    Object.keys(soldByFuel).forEach(ftId=>{ revenue += soldByFuel[ftId] * fuelPriceFor(ftId, e.date); });
+    result[e.id] = { soldByFuel, revenue };
+  });
+  return result;
+}
+function benzinStockSummary(){
+  const calc = benzinComputeAll();
+  const soldTotals = {}; // fuelTypeId -> jami sotilgan litr
+  Object.values(calc).forEach(c=>{
+    Object.keys(c.soldByFuel).forEach(ftId=>{ soldTotals[ftId] = (soldTotals[ftId]||0) + c.soldByFuel[ftId]; });
+  });
+  const deliveredTotals = {};
+  state.benzinDeliveries.forEach(d=>{ deliveredTotals[d.fuel_type_id] = (deliveredTotals[d.fuel_type_id]||0) + Number(d.liters); });
+  return state.fuelTypes.map(ft=>{
+    const delivered = deliveredTotals[ft.id]||0, sold = soldTotals[ft.id]||0;
+    return { fuelType: ft, delivered, sold, balance: delivered - sold };
+  });
+}
+
+// Бензиннинг ойлик "қанча реал даромад қолиши" ҳисоби. МУҲИМ ЧЕКЛОВ:
+// бу фақат бензиннинг ЎЗИГА тегишли рақамлар (сотув − таннарх − акциз −
+// НДС нетто) — яъни ЯЛПИ фойда. Иш ҳақи, электр, банк, ер-мулк солиғи каби
+// умумий компания харажатлари бу ҳисобга КИРМАЙДИ, чунки улар метан ва
+// бензин орасида қандай тақсимланиши ҳозирча аниқ эмас (иккала бизнес ҳам
+// бир компания, бир жамоа) — шуларни қандай бўлишни айтсангиз, "Соф фойда"
+// қаторини ҳам қўшамиз.
+function computeBenzinMonthlyPL(monthStr){
+  const calc = benzinComputeAll();
+  const monthEntries = state.benzinEntries.filter(e=> e.date && e.date.slice(0,7)===monthStr);
+  let revenue = 0;
+  const soldByFuel = {};
+  monthEntries.forEach(e=>{
+    const c = calc[e.id];
+    if(!c) return;
+    revenue += c.revenue;
+    Object.keys(c.soldByFuel).forEach(ftId=>{ soldByFuel[ftId] = (soldByFuel[ftId]||0) + c.soldByFuel[ftId]; });
+  });
+
+  let cogs = 0, excise = 0;
+  const byFuelRows = Object.keys(soldByFuel).map(ftId=>{
+    const row = fuelPriceRowFor(ftId, monthStr+'-28');
+    const liters = soldByFuel[ftId];
+    cogs += liters * row.cost_price;
+    excise += liters * row.excise;
+    return { name: fuelTypeName(ftId), liters, costPrice: row.cost_price, excise: row.excise };
+  });
+
+  const tax = taxFor(monthStr+'-01');
+  const ndsRate = Number(tax.nds_rate)||0;
+  const outputVat = revenue * (ndsRate/(1+ndsRate));
+  const inputVat = cogs * (ndsRate/(1+ndsRate));
+  const ndsNet = outputVat - inputVat;
+
+  const grossProfit = revenue - cogs - excise - ndsNet;
+
+  return { count: monthEntries.length, revenue, byFuelRows, cogs, excise, outputVat, inputVat, ndsNet, grossProfit, tax };
+}
+function renderBenzinPL(){
+  const monthStr = document.getElementById('bpl_month').value || currentMonthKey();
+  const pl = computeBenzinMonthlyPL(monthStr);
+  const box = document.getElementById('bplDetail');
+  if(!box) return;
+  const row = (label, value, opts={}) => `<div class="pl-row${opts.bold?' pl-bold':''}${opts.indent?' pl-indent':''}"><span>${label}</span><span class="${opts.cls||''}">${value}</span></div>`;
+  const zeroExcise = pl.byFuelRows.some(r=>r.excise===0);
+  box.innerHTML = `
+    <p class="hint" style="margin-bottom:10px">${pl.count} та кунлик ҳисобот асосида. ⚠ Бу фақат бензиннинг ЯЛПИ фойдаси — иш ҳақи/электр/банк/ер-мулк каби умумий харажатлар кирмайди (улар метан ва бензин орасида қандай бўлинишини айтсангиз, шуни ҳам қўшамиз).</p>
+    <div class="pl-group-title">Даромад</div>
+    ${row('Сотув суммаси (жами)', fmt(pl.revenue)+" сўм")}
+    <div class="pl-group-title">Таннарх (ёқилғи тури бўйича)</div>
+    ${pl.byFuelRows.map(r=>row(esc(r.name)+' — '+fmt(r.liters)+' л × '+fmt(r.costPrice), fmt(r.liters*r.costPrice)+" сўм", {indent:true})).join('') || row('—','0 сўм',{indent:true})}
+    ${row('= Таннарх жами', fmt(pl.cogs)+" сўм", {bold:true})}
+    <div class="pl-group-title">Солиқлар</div>
+    ${row('Акциз солиғи', fmt(pl.excise)+" сўм", {indent:true})}
+    ${row('НДС — чиқим ('+pct(pl.tax.nds_rate)+', сотувдан)', fmt(pl.outputVat)+" сўм", {indent:true})}
+    ${row('НДС — кирим (ёқилғи харидидан)', '− '+fmt(pl.inputVat)+" сўм", {indent:true})}
+    ${row('= НДС (тўланадиган, нетто)', fmt(pl.ndsNet)+" сўм", {indent:true})}
+    <div class="pl-group-title">Натижа</div>
+    ${row('= ЯЛПИ ФОЙДА (умумий харажатларгача)', fmt(pl.grossProfit)+" сўм", {bold:true, cls: pl.grossProfit<0?'bad-text':'good-text'})}
+    ${zeroExcise ? `<div class="review-warn" style="margin-top:10px">⚠ Баъзи ёқилғи турларида акциз ставкаси 0 турибди (Созламалар → Бензин созламаларида ҳали киритилмаган) — демак юқоридаги фойда ҳақиқийдан КЎПРОҚ кўринади. Бухгалтер билан аниқлаштириб киритинг.</div>` : ''}`;
+}
+
+function tplBenzin(role){
+  const canEdit = role==='operator' || role==='ceo';
+  const canSettings = role==='ceo';
+  const activeDispensers = state.dispensers.filter(d=>d.active);
+  const stock = benzinStockSummary();
+
+  const entryFormHtml = !canEdit ? '' : `
+  <div class="card">
+    <div class="section-title"><h2>Бензин — бугунги ҳисобот</h2></div>
+    <div class="row">
+      <div class="field"><label>Сана</label><input type="date" id="bz_date" value="${todayISO()}"></div>
+      <div class="field"><label>Оператор</label><input type="text" value="${esc(state.profile.full_name)}" disabled></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Калонкалар — ҳозирги кўрсаткич (литр)</h2>
+    <p class="hint">Олдинги кўрсаткич қавс ичида.</p>
+    <div class="row" id="bzDispenserFields">
+      ${activeDispensers.map(d=>`<div class="field"><label>${esc(d.name)} — ${esc(fuelTypeName(d.fuel_type_id))} (олдинги: ${fmt(dispenserBaseline(d.id))})</label>
+        <input type="number" step="0.01" id="bz_disp_${d.id}" data-fuel="${d.fuel_type_id}" placeholder="ҳозирги кўрсаткич"></div>`).join('')}
+    </div>
+    <div class="tile-row" style="margin-top:6px" id="bzPreviewTiles"></div>
+  </div>
+  <div class="card">
+    <h2>Тўлов турлари (сўм)</h2>
+    <div class="row">
+      <div class="field"><label>UZCARD</label><input type="number" id="bz_uzkard" value="0"></div>
+      <div class="field"><label>HUMO</label><input type="number" id="bz_xumo" value="0"></div>
+      <div class="field"><label>Кечаги (изоҳ учун — ҳисобга кирмайди)</label><input type="number" id="bz_kechagi" placeholder="ихтиёрий"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="section-title"><h2>Компанияларга сотилган бензин</h2></div>
+    <div id="bzSalesList"></div>
+    <div class="row" style="margin-top:8px">
+      <div class="field" style="flex:2"><select id="bz_sale_company"></select></div>
+      <div class="field"><select id="bz_sale_fuel">${state.fuelTypes.map(f=>`<option value="${f.id}">${esc(f.name)}</option>`).join('')}</select></div>
+      <div class="field"><input type="number" id="bz_sale_liters" placeholder="литр" step="0.01"></div>
+      <div class="field" style="flex:0 0 auto"><button class="btn secondary small" onclick="addBenzinSale()">+ Қўшиш</button></div>
+    </div>
+  </div>
+  <div class="card"><h2>Изоҳ</h2><textarea id="bz_izoh" placeholder="Ихтиёрий изоҳ..."></textarea></div>
+  <button class="btn" style="width:100%;padding:14px" onclick="openBenzinReview()">Текшириш ва юбориш</button>`;
+
+  const receiveFormHtml = !canEdit ? '' : `
+  <div class="card">
+    <div class="section-title"><h2>Бензин қабул қилиш (ТТН)</h2></div>
+    <p class="hint">Ёқилғи келган ҳар сафар шу ерга киритинг — накладнойнинг расмини ҳам юкланг.</p>
+    <div class="row">
+      <div class="field"><label>Сана</label><input type="date" id="bd_date" value="${todayISO()}"></div>
+      <div class="field"><label>Ёқилғи тури</label><select id="bd_fuel" onchange="benzinTonsToLiters()">${state.fuelTypes.map(f=>`<option value="${f.id}">${esc(f.name)}</option>`).join('')}</select></div>
+      <div class="field"><label>Тонна (ихтиёрий)</label><input type="number" step="0.001" id="bd_tons" placeholder="агар ТТН'да тонна бўлса" oninput="benzinTonsToLiters()"></div>
+      <div class="field"><label>Литр</label><input type="number" id="bd_liters" step="0.01"></div>
+      <div class="field"><label>Жами сумма (сўм)</label><input type="number" id="bd_sum" step="1"></div>
+    </div>
+    <div class="row">
+      <div class="field" style="flex:2"><label>Етказиб берувчи</label><input type="text" id="bd_supplier" placeholder="Тахиаташ нефтебазаси"></div>
+      <div class="field" style="flex:2"><label>Шартнома/Биржа рақами</label><input type="text" id="bd_contract" placeholder="Биржа Т 8766613 от 18.09.2026"></div>
+    </div>
+    <div class="field"><label>Накладной расми (ихтиёрий)</label><input type="file" id="bd_photo" accept="image/*"></div>
+    <button class="btn secondary" style="margin-top:10px" onclick="addBenzinDelivery()" id="bd_submitBtn">Қабул қилиш</button>
+  </div>
+  <div class="card">
+    <h2>Сўнгги қабул қилишлар</h2>
+    <div class="table-wrap"><table><thead><tr><th>Сана</th><th>Тури</th><th>Литр</th><th>Сумма</th><th>Етказиб берувчи</th><th>Расм</th><th>Ким қабул қилди</th></tr></thead>
+      <tbody>${state.benzinDeliveries.slice(0,20).map(d=>
+        `<tr><td>${d.date}</td><td>${esc(fuelTypeName(d.fuel_type_id))}</td><td>${fmt(d.liters)}</td><td>${fmt(d.total_sum)}</td><td>${esc(d.supplier_name||'')}</td>
+          <td>${d.photo_path?`<button class="btn secondary small" onclick="viewBenzinPhoto('${d.photo_path}')">Кўриш</button>`:'—'}</td>
+          <td class="hint">${esc(d.received_by_name||'—')}</td></tr>`
+      ).join('') || `<tr><td colspan="7" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
+    </div>
+  </div>`;
+
+  const stockHtml = `
+  <div class="card group-income">
+    <div class="section-title"><h2>Бензин — ойлик ялпи фойда ҳисоби</h2><input type="month" id="bpl_month" value="${currentMonthKey()}" style="width:auto"></div>
+    <div id="bplDetail"></div>
+  </div>
+  <div class="card">
+    <div class="section-title"><h2>Заҳира (бухгалтерия ҳисоби)</h2></div>
+    <p class="hint">⚠ Бу ҳақиқий тankни ўлчайдиган асбобдан эмас — фақат "келган − сотилган" ҳисоби. Назорат учун фойдаланинг, лекин 100% аниқ деб қабул қилманг.</p>
+    <div class="table-wrap"><table><thead><tr><th>Ёқилғи</th><th>Жами келган</th><th>Жами сотилган</th><th>Ҳисобий қолдиқ</th></tr></thead>
+      <tbody>${stock.map(s=>`<tr><td>${esc(s.fuelType.name)}</td><td>${fmt(s.delivered)}</td><td>${fmt(s.sold)}</td><td><b>${fmt(s.balance)}</b></td></tr>`).join('') || `<tr><td colspan="4" class="empty">Маълумот йўқ</td></tr>`}</tbody></table>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Сўнгги кунлик ҳисоботлар</h2>
+    <div class="table-wrap"><table><thead><tr><th>Сана</th><th>Оператор</th><th>Сумма</th><th>Нақд</th></tr></thead>
+      <tbody>${state.benzinEntries.slice(0,20).map(e=>
+        `<tr><td>${e.date}</td><td>${esc(e.operator_name)}</td><td>${fmt(e.naqd + Number(e.uzkard||0) + Number(e.xumo||0))}</td><td>${fmt(e.naqd)}</td></tr>`
+      ).join('') || `<tr><td colspan="4" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
+    </div>
+  </div>`;
+
+  const settingsHtml = !canSettings ? '' : `
+  <div class="card group-settings">
+    <div class="section-title"><h2>Бензин созламалари</h2></div>
+    <p class="hint">Янги ёқилғи тури, нарх ва калонкаларга қайси марка бириктирилганини шу ерда бошқарасиз.</p>
+    <div class="row">
+      <div class="field"><label>Янги ёқилғи тури</label><input type="text" id="ft_name" placeholder="масалан АИ-95"></div>
+      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addFuelType()">Қўшиш</button></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div class="field"><label>Нарх — қайси турга</label><select id="fp_fuel">${state.fuelTypes.map(f=>`<option value="${f.id}">${esc(f.name)}</option>`).join('')}</select></div>
+      <div class="field"><label>Амал қилиш санаси</label><input type="date" id="fp_date"></div>
+      <div class="field"><label>Сотув нархи (сўм/л)</label><input type="number" id="fp_price"></div>
+      <div class="field"><label>Таннарх (сўм/л)</label><input type="number" id="fp_cost"></div>
+      <div class="field"><label>Акциз (сўм/л)</label><input type="number" id="fp_excise" placeholder="ҳозирча номаълум бўлса 0"></div>
+      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addFuelPrice()">Нарх қўшиш</button></div>
+    </div>
+    <p class="hint">⚠ Акциз ставкасини аниқ билмасангиз, 0 қолдиринг ва бухгалтер билан аниқлаштиргандан кейин киритинг — 0 турганда Бензин ҳисоб-китобида акциз чиқармайди (кам кўрсатилган фойда/солиқ хавфи бор!).</p>
+    <div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>Тур</th><th>Сана</th><th>Сотув</th><th>Таннарх</th><th>Акциз</th></tr></thead>
+      <tbody>${state.fuelPrices.map(p=>`<tr><td>${fuelTypeName(p.fuel_type_id)}</td><td>${p.effective_date}</td><td>${fmt(p.sale_price)}</td><td>${fmt(p.cost_price)}</td><td>${fmt(p.excise)}</td></tr>`).join('') || '<tr><td colspan="5" class="empty">Ҳали киритилмаган</td></tr>'}</tbody></table></div>
+    <h3 style="margin-top:16px">Калонкалар — қайси марка бириктирилган</h3>
+    <div class="table-wrap"><table><thead><tr><th>Калонка</th><th>Ёқилғи тури</th></tr></thead>
+      <tbody>${state.dispensers.map(d=>`<tr><td>${esc(d.name)}</td><td><select onchange="setDispenserFuel('${d.id}', this.value)">${state.fuelTypes.map(f=>`<option value="${f.id}" ${f.id===d.fuel_type_id?'selected':''}>${esc(f.name)}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>
+    <h3 style="margin-top:16px">Зичлик (тонна→литр учун, ихтиёрий)</h3>
+    <p class="hint">Агар ТТН'да фақат тонна кўрсатилса, қабул қилишда шу зичлик орқали литрга авто-ҳисобланади. Аниқ билмасангиз бўш қолдиринг — литрни қўлда киритаверасиз.</p>
+    <div class="table-wrap"><table><thead><tr><th>Тур</th><th>Зичлик (кг/л)</th></tr></thead>
+      <tbody>${state.fuelTypes.map(f=>`<tr><td>${esc(f.name)}</td><td><input type="number" step="0.001" value="${f.density_kg_per_liter||''}" placeholder="масалан 0.750" onchange="setFuelDensity('${f.id}', this.value)"></td></tr>`).join('')}</tbody></table></div>
+  </div>`;
+
+  return entryFormHtml + receiveFormHtml + stockHtml + settingsHtml;
+}
+
+function afterRenderBenzin(){
+  const sel = document.getElementById('bz_sale_company');
+  if(sel) sel.innerHTML = state.companies.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  benzinPending = { sales: [] };
+  renderBenzinSalesList();
+  document.querySelectorAll('#bzDispenserFields input').forEach(inp=>inp.addEventListener('input', recalcBenzinPreview));
+  recalcBenzinPreview();
+  const plMonth = document.getElementById('bpl_month');
+  if(plMonth){ renderBenzinPL(); plMonth.addEventListener('change', renderBenzinPL); }
+}
+
+function recalcBenzinPreview(){
+  const box = document.getElementById('bzPreviewTiles');
+  if(!box) return;
+  const date = document.getElementById('bz_date').value || todayISO();
+  const soldByFuel = {};
+  let ok = true;
+  state.dispensers.filter(d=>d.active).forEach(d=>{
+    const el = document.getElementById('bz_disp_'+d.id);
+    if(!el) return;
+    const v = parseFloat(el.value);
+    if(isNaN(v)){ ok = false; return; }
+    const sold = v - dispenserBaseline(d.id);
+    if(d.fuel_type_id) soldByFuel[d.fuel_type_id] = (soldByFuel[d.fuel_type_id]||0) + sold;
+  });
+  if(!ok){ box.innerHTML = `<div class="tile"><div class="label">Сотув суммаси</div><div class="value">—</div></div>`; return; }
+  let revenue = 0;
+  const lines = Object.keys(soldByFuel).map(ftId=>{
+    const price = fuelPriceFor(ftId, date);
+    revenue += soldByFuel[ftId]*price;
+    return `<div class="tile"><div class="label">${esc(fuelTypeName(ftId))}</div><div class="value">${fmt(soldByFuel[ftId])} л</div></div>`;
+  }).join('');
+  const salesSum = benzinPending.sales.reduce((s,x)=>s+x.sum,0);
+  const uzkard = parseFloat(document.getElementById('bz_uzkard').value)||0;
+  const xumo = parseFloat(document.getElementById('bz_xumo').value)||0;
+  const naqd = revenue - uzkard - xumo - salesSum;
+  box.innerHTML = lines +
+    `<div class="tile"><div class="label">Сотув суммаси</div><div class="value">${fmt(revenue)}</div></div>
+     <div class="tile"><div class="label">Нақд (автоматик)</div><div class="value ${naqd<0?'bad':'good'}">${fmt(naqd)}</div></div>`;
+}
+
+function addBenzinSale(){
+  const companyId = document.getElementById('bz_sale_company').value;
+  const fuelId = document.getElementById('bz_sale_fuel').value;
+  const liters = parseFloat(document.getElementById('bz_sale_liters').value);
+  if(!companyId || !liters){ toast("Компания ва литрни киритинг"); return; }
+  const date = document.getElementById('bz_date').value || todayISO();
+  const price = fuelPriceFor(fuelId, date);
+  const companyName = (state.companies.find(c=>c.id===companyId)||{}).name || '—';
+  benzinPending.sales.push({ company_id: companyId, company_name: companyName, fuel_type_id: fuelId, fuel_name: fuelTypeName(fuelId), liters, price, sum: liters*price });
+  document.getElementById('bz_sale_liters').value = '';
+  renderBenzinSalesList();
+  recalcBenzinPreview();
+}
+function removeBenzinSale(i){ benzinPending.sales.splice(i,1); renderBenzinSalesList(); recalcBenzinPreview(); }
+function renderBenzinSalesList(){
+  const box = document.getElementById('bzSalesList');
+  if(!box) return;
+  box.innerHTML = benzinPending.sales.length
+    ? benzinPending.sales.map((s,i)=>`<div class="list-item">${esc(s.company_name)} — ${esc(s.fuel_name)} ${fmt(s.liters)} л (${fmt(s.sum)} сўм) <button class="del" onclick="removeBenzinSale(${i})">✕</button></div>`).join('')
+    : `<p class="empty">Ҳали қўшилмаган</p>`;
+}
+
+// Гатҳерс + текширади. Хато бўлса toast кўрсатиб null қайтаради.
+function collectBenzinForm(){
+  const date = document.getElementById('bz_date').value;
+  if(!date){ toast("Санани киритинг"); return null; }
+  const readings = {};
+  let ok = true;
+  state.dispensers.filter(d=>d.active).forEach(d=>{
+    const el = document.getElementById('bz_disp_'+d.id);
+    const v = parseFloat(el.value);
+    if(isNaN(v)){ ok=false; return; }
+    readings[d.id] = v;
+  });
+  if(!ok){ toast("Барча калонка кўрсаткичларини киритинг"); return null; }
+
+  let soldByFuel = {}, revenue = 0;
+  state.dispensers.filter(d=>d.active).forEach(d=>{
+    const sold = readings[d.id] - dispenserBaseline(d.id);
+    if(d.fuel_type_id) soldByFuel[d.fuel_type_id] = (soldByFuel[d.fuel_type_id]||0) + sold;
+  });
+  Object.keys(soldByFuel).forEach(ftId=>{ revenue += soldByFuel[ftId]*fuelPriceFor(ftId, date); });
+
+  const uzkard = parseFloat(document.getElementById('bz_uzkard').value)||0;
+  const xumo = parseFloat(document.getElementById('bz_xumo').value)||0;
+  const kechagiVal = document.getElementById('bz_kechagi').value;
+  const salesSum = benzinPending.sales.reduce((s,x)=>s+x.sum,0);
+  const naqd = revenue - uzkard - xumo - salesSum;
+  const izoh = document.getElementById('bz_izoh').value.trim() || null;
+
+  return { date, readings, soldByFuel, revenue, uzkard, xumo, kechagiVal, salesSum, naqd, izoh };
+}
+
+// 1-қадам: текшириш экрани — ҳали ҳеч нарса базага ёзилмайди.
+function openBenzinReview(){
+  const f = collectBenzinForm();
+  if(!f) return;
+
+  const dispRows = state.dispensers.filter(d=>d.active).map(d=>{
+    const before = dispenserBaseline(d.id), after = f.readings[d.id];
+    return `<div class="review-row"><span class="k">${esc(d.name)} (${esc(fuelTypeName(d.fuel_type_id))})</span><span>${fmt(before)} → <b>${fmt(after)}</b> (${fmt(after-before)} л)</span></div>`;
+  }).join('');
+
+  const fuelRows = Object.keys(f.soldByFuel).map(ftId=>
+    `<div class="review-row"><span class="k">${esc(fuelTypeName(ftId))}</span><span><b>${fmt(f.soldByFuel[ftId])} л</b></span></div>`).join('');
+
+  const salesRows = benzinPending.sales.length
+    ? benzinPending.sales.map(s=>`<div class="review-row"><span class="k">${esc(s.company_name)} — ${esc(s.fuel_name)}</span><span>${fmt(s.liters)} л (${fmt(s.sum)} сўм)</span></div>`).join('')
+    : `<div class="review-row"><span class="k">—</span><span>Йўқ</span></div>`;
+
+  const html = `
+  <div class="overlay" id="bzReviewOverlay">
+    <div class="review-box">
+      <h2>Юборишдан олдин текширинг</h2>
+      <p class="hint">Юборилгандан кейин фақат CEO тузата олади — хато бўлса ҳозир орқага қайтиб тузатинг.</p>
+
+      <div class="review-section"><h3>Умумий</h3>
+        <div class="review-row"><span class="k">Сана</span><span><b>${f.date}</b></span></div>
+        <div class="review-row"><span class="k">Оператор</span><span><b>${esc(state.profile.full_name)}</b></span></div>
+      </div>
+
+      <div class="review-section"><h3>Калонкалар (олдинги → ҳозирги)</h3>${dispRows}</div>
+      <div class="review-section"><h3>Сотилган (ёқилғи тури бўйича)</h3>${fuelRows}</div>
+
+      <div class="review-section"><h3>Тўловлар</h3>
+        <div class="review-row"><span class="k">Сотув суммаси</span><span><b>${fmt(f.revenue)} сўм</b></span></div>
+        <div class="review-row"><span class="k">UZCARD</span><span>${fmt(f.uzkard)} сўм</span></div>
+        <div class="review-row"><span class="k">HUMO</span><span>${fmt(f.xumo)} сўм</span></div>
+        <div class="review-row"><span class="k">Компанияларга</span><span>${fmt(f.salesSum)} сўм</span></div>
+        <div class="review-row"><span class="k">Нақд (автоматик)</span><span><b>${fmt(f.naqd)} сўм</b></span></div>
+      </div>
+
+      <div class="review-section"><h3>Компанияларга сотилган</h3>${salesRows}</div>
+      ${f.izoh ? `<div class="review-section"><h3>Изоҳ</h3><p style="font-size:.9rem">${esc(f.izoh)}</p></div>` : ''}
+
+      <label style="display:flex;gap:6px;align-items:center;margin:16px 0 10px"><input type="checkbox" id="bz_review_confirm" style="width:auto" onchange="document.getElementById('bzReviewSubmitBtn').disabled=!this.checked"> Юқоридаги маълумотларнинг ҳаммасини текширдим, тўғри деб тасдиқлайман</label>
+
+      <div class="row">
+        <button class="btn secondary" style="flex:1" onclick="closeBenzinReview()">← Ортга (таҳрирлаш)</button>
+        <button class="btn" id="bzReviewSubmitBtn" style="flex:1" disabled onclick="doSubmitBenzinEntry()">Тасдиқлаш ва юбориш</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+function closeBenzinReview(){
+  const el = document.getElementById('bzReviewOverlay');
+  if(el) el.remove();
+}
+
+// 2-қадам: фақат тасдиқ белгиси босилгандан кейин ишга тушади.
+async function doSubmitBenzinEntry(){
+  const f = collectBenzinForm();
+  if(!f){ closeBenzinReview(); return; }
+
+  const btn = document.getElementById('bzReviewSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Юборилмоқда…';
+
+  const { data: entryRow, error } = await sb.from('benzin_entries').insert({
+    date: f.date, operator_id: state.profile.id, operator_name: state.profile.full_name,
+    readings: f.readings, naqd: f.naqd, uzkard: f.uzkard, xumo: f.xumo,
+    kechagi_note: f.kechagiVal ? parseFloat(f.kechagiVal) : null,
+    izoh: f.izoh
+  }).select().single();
+  if(error){ toast("Хатолик: "+error.message); btn.disabled=false; btn.textContent='Тасдиқлаш ва юбориш'; return; }
+
+  if(benzinPending.sales.length){
+    const rows = benzinPending.sales.map(s=>({ entry_id: entryRow.id, company_id: s.company_id, fuel_type_id: s.fuel_type_id, liters: s.liters, price: s.price, sum: s.sum }));
+    const { error: e2 } = await sb.from('benzin_company_sales').insert(rows);
+    if(e2){ toast("Хатолик (компания сотуви): "+e2.message); btn.disabled=false; btn.textContent='Тасдиқлаш ва юбориш'; return; }
+  }
+
+  closeBenzinReview();
+  toast("Бензин ҳисоботи юборилди ✓");
+  benzinPending = { sales: [] };
+  await loadAll(); renderTab();
+}
+
+// ТТН'да тонна кўрсатилса ва шу ёқилғи учун зичлик Созламаларда
+// киритилган бўлса, литрни авто-ҳисоблайди (қўлда ўзгартириш мумкин).
+function benzinTonsToLiters(){
+  const tons = parseFloat(document.getElementById('bd_tons').value);
+  const fuelId = document.getElementById('bd_fuel').value;
+  const ft = state.fuelTypes.find(f=>f.id===fuelId);
+  if(!isNaN(tons) && ft && ft.density_kg_per_liter){
+    document.getElementById('bd_liters').value = (tons*1000/ft.density_kg_per_liter).toFixed(1);
+  }
+}
+async function setFuelDensity(fuelId, val){
+  const density = parseFloat(val)||null;
+  const { error } = await sb.from('fuel_types').update({ density_kg_per_liter: density }).eq('id', fuelId);
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Сақланди ✓"); await loadAll(); renderTab();
+}
+
+async function addBenzinDelivery(){
+  const date = document.getElementById('bd_date').value;
+  const fuelId = document.getElementById('bd_fuel').value;
+  const tons = parseFloat(document.getElementById('bd_tons').value) || null;
+  const liters = parseFloat(document.getElementById('bd_liters').value);
+  const totalSum = parseFloat(document.getElementById('bd_sum').value);
+  if(!date || !liters || !totalSum){ toast("Сана, литр ва суммани киритинг"); return; }
+
+  const btn = document.getElementById('bd_submitBtn');
+  btn.disabled = true; btn.textContent = 'Юкланмоқда…';
+  try{
+    let photoPath = null;
+    const fileInput = document.getElementById('bd_photo');
+    if(fileInput.files && fileInput.files[0]){
+      const file = fileInput.files[0];
+      const path = `${date}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`;
+      const { error: upErr } = await sb.storage.from('benzin-receipts').upload(path, file);
+      if(upErr){ toast("Расм юкланмади: "+upErr.message+" (лекин маълумот сақланади)"); }
+      else photoPath = path;
+    }
+    const { error } = await sb.from('benzin_deliveries').insert({
+      date, fuel_type_id: fuelId, liters, tons, total_sum: totalSum,
+      supplier_name: document.getElementById('bd_supplier').value.trim() || null,
+      contract_no: document.getElementById('bd_contract').value.trim() || null,
+      photo_path: photoPath,
+      received_by_name: state.profile.full_name
+    });
+    if(error){ toast("Хатолик: "+error.message); return; }
+    toast("Қабул қилинди ✓");
+    await loadAll(); renderTab();
+  } finally {
+    btn.disabled = false; btn.textContent = 'Қабул қилиш';
+  }
+}
+
+async function viewBenzinPhoto(path){
+  const { data, error } = await sb.storage.from('benzin-receipts').createSignedUrl(path, 300);
+  if(error){ toast("Расмни очиб бўлмади: "+error.message); return; }
+  window.open(data.signedUrl, '_blank');
+}
+
+async function addFuelType(){
+  const name = document.getElementById('ft_name').value.trim();
+  if(!name){ toast("Номини киритинг"); return; }
+  const { error } = await sb.from('fuel_types').insert({ name });
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Қўшилди ✓"); await loadAll(); renderTab();
+}
+async function addFuelPrice(){
+  const fuelId = document.getElementById('fp_fuel').value;
+  const date = document.getElementById('fp_date').value;
+  const price = parseFloat(document.getElementById('fp_price').value);
+  const cost = parseFloat(document.getElementById('fp_cost').value)||0;
+  const excise = parseFloat(document.getElementById('fp_excise').value)||0;
+  if(!date || !price){ toast("Сана ва нархни киритинг"); return; }
+  const { error } = await sb.from('fuel_prices').upsert({
+    fuel_type_id: fuelId, effective_date: date, sale_price: price, cost_price: cost, excise: excise,
+    created_by_name: state.profile.full_name
+  }, {onConflict:'fuel_type_id,effective_date'});
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Нарх қўшилди ✓"); await loadAll(); renderTab();
+}
+async function setDispenserFuel(dispenserId, fuelId){
+  const { error } = await sb.from('dispensers').update({ fuel_type_id: fuelId }).eq('id', dispenserId);
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Янгиланди ✓"); await loadAll(); renderTab();
+}
+
+// ============================================================
+// ОЙЛИКЛАР — ҳар бир ходим, ойлиги ва тарихи алоҳида. Бир кишининг
+// ойлиги ўзгарса ҳам, эски ойлар ҳисоби ўзгармайди (нарх тарихи каби).
+// ============================================================
+function totalSalaryFor(monthStr){
+  if(!state.employees.length) return 0;
+  const asOf = monthStr+'-28';
+  let total = 0;
+  state.employees.filter(e=>e.active).forEach(emp=>{
+    const rows = state.employeeSalaries.filter(s=>s.employee_id===emp.id);
+    let best = null;
+    rows.forEach(r=>{ if(r.effective_date <= asOf) best = r; });
+    if(best) total += Number(best.amount)||0;
+  });
+  return total;
+}
+function tplSalaries(role){
+  const canEdit = role==='ceo';
+  const monthStr = currentMonthKey();
+  const rows = state.employees.map(emp=>{
+    const salaries = state.employeeSalaries.filter(s=>s.employee_id===emp.id).sort((a,b)=>a.effective_date.localeCompare(b.effective_date));
+    let current = null;
+    salaries.forEach(s=>{ if(s.effective_date <= monthStr+'-28') current = s; });
+    return { emp, current, salaries };
+  });
+  return `
+  <div class="card">
+    <div class="section-title"><h2>Ходимлар ва ойликлари</h2></div>
+    <p class="hint">Жорий ойлик = шу ходимнинг энг сўнгги амал қилаётган ставкаси. Ойлик даромад ҳисоботидаги "Иш ҳақи" харажати шу ердаги барча фаол ходимлар ойлигининг йиғиндисидан олинади.</p>
+    <div class="table-wrap"><table><thead><tr><th>Исм</th><th>Лавозим</th><th>Жорий ойлиги</th><th>Ҳолат</th>${canEdit?'<th></th>':''}</tr></thead>
+      <tbody>${rows.map(r=>`<tr><td>${esc(r.emp.full_name)}</td><td>${esc(r.emp.position||'')}</td><td>${r.current?fmt(r.current.amount):'<span class="hint">белгиланмаган</span>'}</td>
+        <td>${r.emp.active?'Фаол':'Фаол эмас'}</td>
+        ${canEdit?`<td><button class="del" onclick="deleteEmployee('${r.emp.id}')" title="Ўчириш">✕</button></td>`:''}</tr>`).join('') || `<tr><td colspan="${canEdit?5:4}" class="empty">Ҳали ходим киритилмаган</td></tr>`}</tbody></table>
+    </div>
+    <div class="tile-row" style="margin-top:10px"><div class="tile"><div class="label">Жорий ой (${monthStr}) — жами иш ҳақи</div><div class="value">${fmt(totalSalaryFor(monthStr))}</div></div></div>
+  </div>
+  ${!canEdit ? '' : `
+  <div class="card group-settings">
+    <h2>Янги ходим қўшиш</h2>
+    <div class="row">
+      <div class="field" style="flex:2"><label>Исм-фамилия</label><input type="text" id="emp_name"></div>
+      <div class="field"><label>Лавозим</label><input type="text" id="emp_position" placeholder="Оператор / Ҳайдовчи..."></div>
+      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addEmployee()">Қўшиш</button></div>
+    </div>
+  </div>
+  <div class="card group-settings">
+    <h2>Ойлик белгилаш / ўзгартириш</h2>
+    <p class="hint">Янги қатор қўшсангиз, шу санадан бошлаб амал қилади — эски ойлар эски ставкада қолаверади.</p>
+    <div class="row">
+      <div class="field" style="flex:2"><label>Ходим</label><select id="sal_employee"></select></div>
+      <div class="field"><label>Амал қилиш санаси</label><input type="date" id="sal_date" value="${todayISO()}"></div>
+      <div class="field"><label>Ойлик суммаси</label><input type="number" id="sal_amount"></div>
+      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addEmployeeSalary()">Сақлаш</button></div>
+    </div>
+  </div>`}`;
+}
+function afterRenderSalaries(){
+  const sel = document.getElementById('sal_employee');
+  if(sel) sel.innerHTML = state.employees.filter(e=>e.active).map(e=>`<option value="${e.id}">${esc(e.full_name)}</option>`).join('');
+}
+async function addEmployee(){
+  const name = document.getElementById('emp_name').value.trim();
+  if(!name){ toast("Исмни киритинг"); return; }
+  const { error } = await sb.from('employees').insert({
+    full_name: name, position: document.getElementById('emp_position').value.trim()||null,
+    created_by_name: state.profile.full_name
+  });
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Қўшилди ✓"); await loadAll(); renderTab();
+}
+async function deleteEmployee(id){
+  if(!confirm("Бу ходимни ўчирасизми? (тарихи ҳам ўчади)")) return;
+  const { error } = await sb.from('employees').delete().eq('id', id);
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Ўчирилди ✓"); await loadAll(); renderTab();
+}
+async function addEmployeeSalary(){
+  const employeeId = document.getElementById('sal_employee').value;
+  const date = document.getElementById('sal_date').value;
+  const amount = parseFloat(document.getElementById('sal_amount').value);
+  if(!employeeId || !date || !amount){ toast("Ходим, сана ва суммани киритинг"); return; }
+  const { error } = await sb.from('employee_salaries').upsert({
+    employee_id: employeeId, effective_date: date, amount, created_by_name: state.profile.full_name
+  }, {onConflict:'employee_id,effective_date'});
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Сақланди ✓"); await loadAll(); renderTab();
 }
 
 boot();
