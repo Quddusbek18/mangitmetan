@@ -99,6 +99,7 @@ th{color:var(--muted);font-weight:600;font-size:.7rem;text-transform:uppercase}
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 // ============================================================
 // CONFIG — these two values are safe to be public (anon/publishable
@@ -122,6 +123,23 @@ let state = {
 };
 let pending = { deliveries: [] };
 let benzinPending = { sales: [] };
+
+// ============================================================
+// ЎҚУВ РЕЖИМИ — операторлар машқ қилиши учун. Ёқилганда, шакллар худди
+// одатдагидек ишлайди (текшириш экрани ҳам чиқади), лекин "Тасдиқлаш"
+// босилганда ҲЕЧ НАРСА базага ёзилмайди — фақат натижа кўрсатилади.
+// Алоҳида база қурилмаган (мураккаблик учун), шунчаки ёзиш қадами
+// сохталаштирилади. Саҳифа қайта юкланса ўчиб қолади (қасддан — доим
+// ёдда бўлсин деб).
+// ============================================================
+let trainingMode = false;
+function toggleTrainingMode(){ trainingMode = !trainingMode; renderTab(); }
+function trainingBannerHtml(){
+  return !trainingMode ? '' : `<div class="review-warn" style="margin-bottom:14px">🎓 ЎҚУВ РЕЖИМИ ёқилган — бу ерда киритган ҳеч нарса базага сақланмайди, фақат машқ учун.</div>`;
+}
+function trainingToggleBtnHtml(){
+  return `<button class="btn ${trainingMode?'':'secondary'} small" style="margin-bottom:12px" onclick="toggleTrainingMode()">${trainingMode?'🎓 Ўқув режими — YONIQ (босиб ўчиринг)':'🎓 Ўқув режимини ёқиш (машқ учун, ҳеч нарса сақланмайди)'}</button>`;
+}
 let activeTab = null;
 
 const fmt = n => (n===null||n===undefined||isNaN(n)) ? '—' : Math.round(n).toLocaleString('en-US').replace(/,/g,' ');
@@ -340,6 +358,8 @@ function afterRenderTab(){
 // ============================================================
 function tplEntry(){
   return `
+  ${trainingToggleBtnHtml()}
+  ${trainingBannerHtml()}
   ${lowBalanceCardHtml()}
   <div class="card">
     <div class="section-title"><h2>Бугунги ҳисобот</h2></div>
@@ -528,6 +548,14 @@ function closeReview(){
 async function doSubmitEntry(){
   const f = collectEntryForm();
   if(!f){ closeReview(); return; }
+
+  if(trainingMode){
+    closeReview();
+    toast("🎓 Машқ якунланди — бу ҳеч нарса базага ёзилмади");
+    pending = {deliveries:[]};
+    renderTab();
+    return;
+  }
 
   const btn = document.getElementById('reviewSubmitBtn');
   btn.disabled = true; btn.textContent = 'Юборилмоқда…';
@@ -1119,6 +1147,11 @@ async function addOtherExpense(){
 // ============================================================
 function tplSettings(){
   return `
+  <div class="card">
+    <div class="section-title"><h2>Захира нусха (Excel)</h2></div>
+    <p class="hint">Барча маълумот (кунлик ҳисоботлар, бензин, компаниялар, ойликлар, ойлик хулосалар) битта Excel файлга тушади ва компьютерингизга юкланади. Хавфсизлик учун ҳар ойда бир марта олиб, алоҳида жойда (масалан Google Drive) сақлаб қўйишни тавсия қиламиз.</p>
+    <button class="btn secondary" onclick="exportBackupExcel()">📥 Excel'га юклаб олиш</button>
+  </div>
   <div class="card group-settings">
     <div class="section-title"><h2>Нарх тарихи (Сотув / Таннарх / Акциз / Йўқотиш коэффициенти)</h2></div>
     <div class="table-wrap"><table><thead><tr><th>Сана (дан)</th><th>Сотув</th><th>Таннарх</th><th>Акциз</th><th>Йўқотиш коэфф.</th><th>Ким киритган</th></tr></thead>
@@ -1341,6 +1374,8 @@ function tplBenzin(role){
   const stock = benzinStockSummary();
 
   const entryFormHtml = !canEdit ? '' : `
+  ${trainingToggleBtnHtml()}
+  ${trainingBannerHtml()}
   <div class="card">
     <div class="section-title"><h2>Бензин — бугунги ҳисобот</h2></div>
     <div class="row">
@@ -1615,6 +1650,14 @@ async function doSubmitBenzinEntry(){
   const f = collectBenzinForm();
   if(!f){ closeBenzinReview(); return; }
 
+  if(trainingMode){
+    closeBenzinReview();
+    toast("🎓 Машқ якунланди — бу ҳеч нарса базага ёзилмади");
+    benzinPending = { sales: [] };
+    renderTab();
+    return;
+  }
+
   const btn = document.getElementById('bzReviewSubmitBtn');
   btn.disabled = true; btn.textContent = 'Юборилмоқда…';
 
@@ -1662,6 +1705,14 @@ async function addBenzinDelivery(){
   const liters = parseFloat(document.getElementById('bd_liters').value);
   const totalSum = parseFloat(document.getElementById('bd_sum').value);
   if(!date || !liters || !totalSum){ toast("Сана, литр ва суммани киритинг"); return; }
+
+  if(trainingMode){
+    toast("🎓 Машқ якунланди — бу ҳеч нарса базага ёзилмади ва расм юкланмади");
+    document.getElementById('bd_liters').value=''; document.getElementById('bd_sum').value='';
+    document.getElementById('bd_tons').value=''; document.getElementById('bd_supplier').value='';
+    document.getElementById('bd_contract').value=''; document.getElementById('bd_photo').value='';
+    return;
+  }
 
   const btn = document.getElementById('bd_submitBtn');
   btn.disabled = true; btn.textContent = 'Юкланмоқда…';
@@ -1809,6 +1860,66 @@ async function addEmployeeSalary(){
   }, {onConflict:'employee_id,effective_date'});
   if(error){ toast("Хатолик: "+error.message); return; }
   toast("Сақланди ✓"); await loadAll(); renderTab();
+}
+
+// ============================================================
+// EXCEL ЗАХИРА НУСХА — барча маълумотни бир файлга, бир нечта варақда.
+// (SheetJS кутубхонаси <head>да юкланган.)
+// ============================================================
+function exportBackupExcel(){
+  if(typeof XLSX === 'undefined'){ toast("Excel кутубхонаси юкланмади — интернетни текшириб, саҳифани қайта юкланг"); return; }
+  const wb = XLSX.utils.book_new();
+  const addSheet = (name, rows) => {
+    const safe = (rows && rows.length) ? rows : [{}];
+    const ws = XLSX.utils.json_to_sheet(safe);
+    XLSX.utils.book_append_sheet(wb, ws, name.slice(0,31));
+  };
+
+  addSheet('Kunlik hisobot (metan)', state.entries.map(e=>({
+    Sana:e.date, Operator:e.operator_name, SotilganM3:e.sold_m3, Agres:e.agres, SotuvSummasi:e.sales_value,
+    Naqt:e.naqt, Uzcard:e.uzcard, Humo:e.humo, QR:e.qr, Narx:e.price, Izoh:e.izoh
+  })));
+  addSheet('Kompaniyaga gaz', state.deliveries.map(d=>({
+    Sana:(d.entries&&d.entries.date)||'', Kompaniya:(state.companies.find(c=>c.id===d.company_id)||{}).name||'', M3:d.m3
+  })));
+  addSheet('Kompaniya tolovlari', state.payments.map(p=>({
+    Sana:p.date, Kompaniya:(state.companies.find(c=>c.id===p.company_id)||{}).name||'', Summa:p.amount, Izoh:p.note, KimKiritgan:p.created_by_name
+  })));
+  addSheet('Kompaniyalar (balans)', companyTotals().map(c=>({ Nomi:c.name, SotilganM3:c.m3, SotilganSumma:c.sold, Tolangan:c.paid, Balans:c.paid-c.sold })));
+  addSheet('Benzin kunlik', state.benzinEntries.map(e=>({
+    Sana:e.date, Operator:e.operator_name, Naqd:e.naqd, Uzkard:e.uzkard, Xumo:e.xumo, Kechagi:e.kechagi_note, Izoh:e.izoh,
+    Korsatkichlar: JSON.stringify(e.readings)
+  })));
+  addSheet('Benzin qabul qilish', state.benzinDeliveries.map(d=>({
+    Sana:d.date, Turi:fuelTypeName(d.fuel_type_id), Tonna:d.tons, Litr:d.liters, Summa:d.total_sum,
+    Yetkazibberuvchi:d.supplier_name, Shartnoma:d.contract_no, KimQabulQildi:d.received_by_name
+  })));
+  addSheet('Benzin kompaniya sotuvi', state.benzinCompanySales.map(s=>({
+    Kompaniya:(state.companies.find(c=>c.id===s.company_id)||{}).name||'', Turi:fuelTypeName(s.fuel_type_id), Litr:s.liters, Narx:s.price, Summa:s.sum
+  })));
+  addSheet('Xodimlar', state.employees.map(e=>({ Ism:e.full_name, Lavozim:e.position, Faol:e.active?'Ha':"Yo'q" })));
+  addSheet('Oyliklar tarixi', state.employeeSalaries.map(s=>({
+    Xodim:(state.employees.find(e=>e.id===s.employee_id)||{}).full_name||'', SanaDan:s.effective_date, Summa:s.amount
+  })));
+  addSheet('Narxlar (metan)', state.prices);
+  addSheet('Soliq stavkalari', state.taxRates);
+  addSheet('Doimiy xarajatlar', state.fixedCosts);
+  addSheet('Benzin narxlari', state.fuelPrices.map(p=>({ Turi:fuelTypeName(p.fuel_type_id), SanaDan:p.effective_date, Sotuv:p.sale_price, Tannarx:p.cost_price, Aksiz:p.excise })));
+
+  const metanMonths = [...new Set(state.entries.map(e=>e.date && e.date.slice(0,7)).filter(Boolean))].sort();
+  addSheet('Oylik hisobot (metan)', metanMonths.map(m=>{
+    const pl = computeMonthlyPL(m);
+    return { Oy:m, Daromad:pl.revenue, XarajatlarJami:pl.expensesTotal, Aksiz:pl.excise, NDS_netto:pl.ndsNet,
+      IjtimoiySoliq:pl.socialAmount, Foyda:pl.profitBeforeTax, FoydaSoligi:pl.profitTaxAmount, SofFoyda:pl.netProfit };
+  }));
+  const benzinMonths = [...new Set(state.benzinEntries.map(e=>e.date && e.date.slice(0,7)).filter(Boolean))].sort();
+  addSheet('Oylik hisobot (benzin)', benzinMonths.map(m=>{
+    const pl = computeBenzinMonthlyPL(m);
+    return { Oy:m, Daromad:pl.revenue, Tannarx:pl.cogs, Aksiz:pl.excise, NDS_netto:pl.ndsNet, YalpiFoyda:pl.grossProfit };
+  }));
+
+  XLSX.writeFile(wb, `Mangit_Metan_zaxira_${todayISO()}.xlsx`);
+  toast("Юклаб олинди ✓");
 }
 
 boot();
