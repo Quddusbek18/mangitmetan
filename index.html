@@ -72,6 +72,8 @@ th{color:var(--muted);font-weight:600;font-size:.7rem;text-transform:uppercase}
 .pl-row.pl-bold{font-weight:700;font-size:1rem;border-bottom:2px solid var(--fg);margin-top:4px}
 .pl-row .good-text{color:var(--good)}
 .pl-row .bad-text{color:var(--bad)}
+.pl-group-title{font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);font-weight:700;margin-top:12px;margin-bottom:2px}
+.pl-group-title:first-of-type{margin-top:0}
 .empty{color:var(--muted);font-size:.85rem;padding:12px 0;text-align:center}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 18px;border-radius:10px;font-size:.85rem;opacity:0;pointer-events:none;transition:opacity .25s;z-index:50}
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow-y:auto;z-index:100}
@@ -207,7 +209,7 @@ async function loadAll(){
 }
 
 function priceFor(dateStr){
-  let best = state.prices[0] || {sale_price:5500, cost_price:2750, excise:780};
+  let best = state.prices[0] || {sale_price:5500, cost_price:2750, excise:780, loss_coefficient:0.986};
   for(const p of state.prices){ if(p.effective_date <= dateStr) best = p; }
   return best;
 }
@@ -249,8 +251,8 @@ function companyTotals(){
 // ============================================================
 function tabsForRole(role){
   if(role === 'operator') return [['entry','Кунлик ҳисобот']];
-  if(role === 'direktor') return [['overview','Умумий'],['reports','Ҳисоботлар'],['companies','Компаниялар'],['expenses','Харажатлар']];
-  return [['entry','Кунлик ҳисобот'],['overview','Умумий'],['reports','Ҳисоботлар'],['companies','Компаниялар'],['expenses','Харажатлар'],['settings','Созламалар']];
+  if(role === 'direktor') return [['overview','Умумий'],['reports','Ҳисоботлар'],['davlat','Давлат ҳисоботи'],['companies','Компаниялар'],['expenses','Харажатлар']];
+  return [['entry','Кунлик ҳисобот'],['overview','Умумий'],['reports','Ҳисоботлар'],['davlat','Давлат ҳисоботи'],['companies','Компаниялар'],['expenses','Харажатлар'],['settings','Созламалар']];
 }
 
 function renderShell(){
@@ -277,6 +279,7 @@ function renderTab(){
   if(activeTab==='entry') body.innerHTML = tplEntry();
   else if(activeTab==='overview') body.innerHTML = tplOverview();
   else if(activeTab==='reports') body.innerHTML = tplReports();
+  else if(activeTab==='davlat') body.innerHTML = tplDavlat();
   else if(activeTab==='companies') body.innerHTML = tplCompanies(role);
   else if(activeTab==='expenses') body.innerHTML = tplExpenses(role);
   else if(activeTab==='settings') body.innerHTML = tplSettings();
@@ -292,6 +295,10 @@ function afterRenderTab(){
   }
   if(activeTab==='companies'){
     afterRenderCompanies();
+  }
+  if(activeTab==='davlat'){
+    renderDavlat();
+    document.getElementById('dh_month').addEventListener('change', renderDavlat);
   }
   if(activeTab==='overview'){
     renderPL();
@@ -531,31 +538,58 @@ function currentMonthKey(){ return todayISO().slice(0,7); }
 // verify each number against the source data - this is an ESTIMATE built
 // from the entered rates, not a substitute for the accountant's own
 // bookkeeping (NDS/tax math in particular is simplified).
+// Matches the company's own official monthly report format exactly
+// (Даромадлар / Харажатлар / Солиқлар / Фойда), verified line-by-line
+// against a real submitted "МАНГИТ МЕТАН" hisobot:
+//   Фойда = Даромад − Харажатлар(Газ+Электр+Иш ҳақи+Банк+Бошқа)
+//           − Акциз − НДС(нетто) − Ижтимоий солиқ − Ер-мулк солиғи
+//   Фойда солиғи = Фойда × ставка (ижтимоий солиқ АЛЛАҚАЧОН айирилган
+//   бўлгандан кейин ҳисобланади)
+//   Соф фойда = Фойда − Фойда солиғи
 function computeMonthlyPL(monthStr){
   const monthEntries = state.entries.filter(e=> e.date && e.date.slice(0,7)===monthStr);
-  let revenue=0, cogs=0, excise=0;
+  let revenue=0, soldM3Total=0, agresTotal=0;
   monthEntries.forEach(e=>{
-    const soldM3 = Number(e.sold_m3)||0;
     revenue += Number(e.sales_value)||0;
-    const pr = priceFor(e.date);
-    cogs += soldM3 * pr.cost_price;
-    excise += soldM3 * pr.excise;
+    soldM3Total += Number(e.sold_m3)||0;
+    agresTotal += Number(e.agres)||0;
   });
-  const grossProfit = revenue - cogs - excise;
+  // Narx (taннарх/акциз) o'zgargan bo'lishi mumkin oy ichida — shuning
+  // uchun oyning ohirgi kunidagi ставкаdan foydalanamiz (rasmiy hisobot
+  // ham bir oyga bitta ставка bilan ishlaydi).
+  const pr = priceFor(monthStr+'-28');
+  // Таннарх — таъминотчидан қанча газ СОТИБ ОЛИНГАНИ (Агрес, давлат
+  // ҳисоблагичи) асосида — эски расмий ҳисоботдаги каби (пумпадан
+  // сотилган m3 эмас).
+  const cogsGas = agresTotal * pr.cost_price;
+  // Акциз — сотилган (пумпа) m3'дан олинадиган солиқ.
+  const excise = soldM3Total * pr.excise;
+
   const fc = fixedCostFor(monthStr+'-01');
-  const fixedTotal = (Number(fc.salary)||0)+(Number(fc.bank_loan_interest)||0)+(Number(fc.land_property_tax)||0);
+  const electricity = Number(fc.electricity_tariff)||0; // shu oyning JAMI elektr xarajati (so'm)
+  const salary = Number(fc.salary)||0;
+  const bank = Number(fc.bank_loan_interest)||0;
+  const land = Number(fc.land_property_tax)||0;
   const otherExp = state.otherExpenses.filter(e=>e.date && e.date.slice(0,7)===monthStr).reduce((s,e)=>s+Number(e.amount||0),0);
+  const expensesTotal = cogsGas + electricity + salary + bank + otherExp;
+
   const prepayGaz = state.prepayments.filter(p=>p.month && p.month.slice(0,7)===monthStr && p.kind==='gaz').reduce((s,p)=>s+Number(p.amount||0),0);
   const prepayTok = state.prepayments.filter(p=>p.month && p.month.slice(0,7)===monthStr && p.kind==='tok').reduce((s,p)=>s+Number(p.amount||0),0);
-  const preTax = grossProfit - fixedTotal - otherExp;
+
   const tax = taxFor(monthStr+'-01');
   const ndsRate = Number(tax.nds_rate)||0;
-  const ndsAmount = revenue * (ndsRate/(1+ndsRate));
-  const socialAmount = (Number(fc.salary)||0) * (Number(tax.social_tax_rate)||0);
-  const profitTaxBase = Math.max(preTax - ndsAmount, 0);
-  const profitTaxAmount = profitTaxBase * (Number(tax.profit_tax_rate)||0);
-  const netProfit = preTax - ndsAmount - socialAmount - profitTaxAmount;
-  return { count: monthEntries.length, revenue, cogs, excise, grossProfit, fc, fixedTotal, otherExp, prepayGaz, prepayTok, preTax, tax, ndsAmount, socialAmount, profitTaxAmount, netProfit };
+  const outputVat = revenue * (ndsRate/(1+ndsRate));
+  const inputVat = (cogsGas + electricity) * (ndsRate/(1+ndsRate));
+  const ndsNet = outputVat - inputVat;
+  const socialAmount = salary * (Number(tax.social_tax_rate)||0);
+
+  const profitBeforeTax = revenue - expensesTotal - excise - ndsNet - socialAmount - land;
+  const profitTaxAmount = Math.max(profitBeforeTax, 0) * (Number(tax.profit_tax_rate)||0);
+  const netProfit = profitBeforeTax - profitTaxAmount;
+
+  return { count: monthEntries.length, revenue, cogsGas, electricity, salary, bank, land, otherExp, expensesTotal,
+    excise, outputVat, inputVat, ndsNet, socialAmount, profitBeforeTax, tax, profitTaxAmount, netProfit,
+    prepayGaz, prepayTok };
 }
 
 function renderPL(){
@@ -564,21 +598,28 @@ function renderPL(){
   const box = document.getElementById('plDetail');
   const row = (label, value, opts={}) => `<div class="pl-row${opts.bold?' pl-bold':''}${opts.indent?' pl-indent':''}"><span>${label}</span><span class="${opts.cls||''}">${value}</span></div>`;
   box.innerHTML = `
-    <p class="hint" style="margin-bottom:10px">${pl.count} та кунлик ҳисобот асосида ҳисобланди. Рақамлар СОЗЛАМАЛАРдаги нарх/солиқ ставкаларига асосан тахминий ҳисобланади — аниқ солиқ ҳисоб-китоби учун бухгалтер билан текшириб олинг.</p>
+    <p class="hint" style="margin-bottom:10px">${pl.count} та кунлик ҳисобот асосида, компаниянинг расмий ойлик ҳисобот форматига мос ҳолда ҳисобланди. Рақамлар СОЗЛАМАЛАРдаги нарх/солиқ ставкаларига асосан ҳисобланади — аниқ топшириладиган солиқ учун бухгалтер билан текшириб олинг.</p>
+    <div class="pl-group-title">Даромад</div>
     ${row('Сотув суммаси (жами)', fmt(pl.revenue)+" сўм")}
-    ${row('− Таннарх харажати (газ)', fmt(pl.cogs)+" сўм", {indent:true})}
-    ${row('− Акциз', fmt(pl.excise)+" сўм", {indent:true})}
-    ${row('= Ялпи фойда', fmt(pl.grossProfit)+" сўм", {bold:true})}
-    ${row('− Иш ҳақи', fmt(pl.fc.salary)+" сўм", {indent:true})}
-    ${row('− Банк кредити', fmt(pl.fc.bank_loan_interest)+" сўм", {indent:true})}
-    ${row('− Ер-мулк солиғи', fmt(pl.fc.land_property_tax)+" сўм", {indent:true})}
-    ${row('− Бошқа харажатлар', fmt(pl.otherExp)+" сўм", {indent:true})}
-    ${row('= Солиққача фойда', fmt(pl.preTax)+" сўм", {bold:true})}
-    ${row('− НДС ('+pct(pl.tax.nds_rate)+')', fmt(pl.ndsAmount)+" сўм", {indent:true})}
-    ${row('− Ижтимоий солиқ ('+pct(pl.tax.social_tax_rate)+')', fmt(pl.socialAmount)+" сўм", {indent:true})}
+    <div class="pl-group-title">Харажатлар</div>
+    ${row('Табиий газ (харид, Агрес асосида)', fmt(pl.cogsGas)+" сўм", {indent:true})}
+    ${row('Электр энергияси', fmt(pl.electricity)+" сўм", {indent:true})}
+    ${row('Иш ҳақи', fmt(pl.salary)+" сўм", {indent:true})}
+    ${row('Банк кредити ва фоиз', fmt(pl.bank)+" сўм", {indent:true})}
+    ${row('Бошқа харажатлар', fmt(pl.otherExp)+" сўм", {indent:true})}
+    ${row('= Харажатлар жами', fmt(pl.expensesTotal)+" сўм", {bold:true})}
+    <div class="pl-group-title">Солиқлар</div>
+    ${row('Акциз солиғи (сотилган газ кубига)', fmt(pl.excise)+" сўм", {indent:true})}
+    ${row('НДС — чиқим ('+pct(pl.tax.nds_rate)+', сотувдан)', fmt(pl.outputVat)+" сўм", {indent:true})}
+    ${row('НДС — кирим (газ+электр харидидан, ҳисобга олинади)', '− '+fmt(pl.inputVat)+" сўм", {indent:true})}
+    ${row('= НДС (тўланадиган, нетто)', fmt(pl.ndsNet)+" сўм", {indent:true})}
+    ${row('Ижтимоий солиқ ('+pct(pl.tax.social_tax_rate)+', иш ҳақидан)', fmt(pl.socialAmount)+" сўм", {indent:true})}
+    ${row('Ер ва мол-мулк солиғи', fmt(pl.land)+" сўм", {indent:true})}
+    <div class="pl-group-title">Натижа</div>
+    ${row('= Фойда', fmt(pl.profitBeforeTax)+" сўм", {bold:true})}
     ${row('− Фойда солиғи ('+pct(pl.tax.profit_tax_rate)+')', fmt(pl.profitTaxAmount)+" сўм", {indent:true})}
     ${row('= СОФ ФОЙДА', fmt(pl.netProfit)+" сўм", {bold:true, cls: pl.netProfit<0?'bad-text':'good-text'})}
-    <div class="hint" style="margin-top:10px">Препеймент (шу ой): Газ — ${fmt(pl.prepayGaz)} сўм, Ток — ${fmt(pl.prepayTok)} сўм (буларни "Харажатлар" бўлимида кўрасиз, тепадаги ҳисобга алоҳида — газ таннархи ичида ҳисобга олинган деб тахмин қилинади).</div>`;
+    <div class="hint" style="margin-top:10px">Препеймент (шу ой): Газ — ${fmt(pl.prepayGaz)} сўм, Ток — ${fmt(pl.prepayTok)} сўм (булар келгуси харажатлар учун олдиндан тўлов — юқоридаги ҳисобга алоҳида қўшилмайди, "Харажатлар" бўлимида кўринади).</div>`;
 }
 
 function tplOverview(){
@@ -656,6 +697,79 @@ async function deleteEntry(id){
   await loadAll();
   document.getElementById('rep_date').value = '';
   renderTab();
+}
+
+// ============================================================
+// DAVLAT ҲИСОБОТИ — state/regulator-facing report
+// ------------------------------------------------------------
+// Same formula as the old Excel's DAVLAT_HISOBOT sheet: the internal
+// (ICHKI) numbers are built from the pump totals, but the state gas
+// meter is the Агрес counter, and the meter reading is corrected by a
+// fixed "loss coefficient" (0.986 historically -> Созламалар / Нарх
+// тарихи) before it's reported. UZCARD/HUMO and company deliveries
+// carry over unchanged; "Терминал" is the balancing cash figure that
+// makes the state-side numbers add up to the state-side sold volume.
+// Nothing here is stored separately -- it's all computed on the fly
+// from entries + deliveries, exactly like the old sheet computed it
+// from ICHKI_HISOBOT with formulas.
+// ============================================================
+function computeDavlatRow(e, companyM3, companySum){
+  const lossCoef = priceFor(e.date).loss_coefficient || 0.986;
+  const stateSoldM3 = Number(e.agres||0) * lossCoef;
+  const humo = Number(e.humo)||0;
+  const uzcard = Number(e.uzcard)||0;
+  const stateRevenue = stateSoldM3 * Number(e.price||0);
+  const terminal = stateRevenue - humo - uzcard - companySum;
+  const totalRevenue = humo + uzcard + terminal + companySum;
+  return { lossCoef, stateSoldM3, humo, uzcard, companyM3, companySum, terminal, totalRevenue };
+}
+function tplDavlat(){
+  return `
+  <div class="card group-tax">
+    <div class="section-title"><h2>Давлат ҳисоботи</h2></div>
+    <p class="hint">Бу — давлат (газ таъминоти) ҳисоботига мос рақамлар. Ички ҳисобот помпа кўрсаткичига асосланади, давлат ҳисоботи эса Агрес (давлат ҳисоблагичи) кўрсаткичига йўқотиш коэффициентини қўллаб ҳисобланади (Созламалар → Нарх тарихида созланади). "Терминал" — қолган суммани мувозанатлаш учун ҳисобланадиган устун.</p>
+    <div class="row">
+      <div class="field"><label>Ой</label><input type="month" id="dh_month" value="${currentMonthKey()}"></div>
+    </div>
+    <div id="dhDetail"></div>
+  </div>`;
+}
+function renderDavlat(){
+  const monthStr = document.getElementById('dh_month').value || currentMonthKey();
+  const rows = state.entries.filter(e=> e.date && e.date.slice(0,7)===monthStr).slice().sort((a,b)=> a.date.localeCompare(b.date));
+  const box = document.getElementById('dhDetail');
+  if(!rows.length){ box.innerHTML = '<p class="empty">Бу ойда ҳисобот йўқ</p>'; return; }
+
+  const computed = rows.map(e=>{
+    const dels = state.deliveries.filter(d=>d.entry_id===e.id);
+    const companyM3 = dels.reduce((s,d)=>s+(Number(d.m3)||0),0);
+    const companySum = companyM3 * Number(e.price||0);
+    return { e, ...computeDavlatRow(e, companyM3, companySum) };
+  });
+
+  const totals = computed.reduce((t,r)=>({
+    stateSoldM3: t.stateSoldM3+r.stateSoldM3, humo: t.humo+r.humo, uzcard: t.uzcard+r.uzcard,
+    companyM3: t.companyM3+r.companyM3, companySum: t.companySum+r.companySum,
+    terminal: t.terminal+r.terminal, totalRevenue: t.totalRevenue+r.totalRevenue
+  }), {stateSoldM3:0,humo:0,uzcard:0,companyM3:0,companySum:0,terminal:0,totalRevenue:0});
+
+  box.innerHTML = `
+  <div class="table-wrap">
+    <table><thead><tr>
+      <th>Сана</th><th>Оператор</th><th>Агрес</th><th>Коэфф.dan кейин m3</th><th>HUMO</th><th>UZCARD</th>
+      <th>Компания m3</th><th>Компания суммаси</th><th>Терминал</th><th>Умумий тушум</th>
+    </tr></thead>
+    <tbody>${computed.map(r=>`<tr>
+      <td>${r.e.date}</td><td>${esc(r.e.operator_name)}</td><td>${fmt(r.e.agres)}</td><td>${fmt(r.stateSoldM3)}</td>
+      <td>${fmt(r.humo)}</td><td>${fmt(r.uzcard)}</td><td>${fmt(r.companyM3)}</td><td>${fmt(r.companySum)}</td>
+      <td>${fmt(r.terminal)}</td><td><b>${fmt(r.totalRevenue)}</b></td>
+    </tr>`).join('')}</tbody>
+    <tfoot><tr style="font-weight:700;border-top:2px solid var(--fg)">
+      <td colspan="3">Ой якуни</td><td>${fmt(totals.stateSoldM3)}</td><td>${fmt(totals.humo)}</td><td>${fmt(totals.uzcard)}</td>
+      <td>${fmt(totals.companyM3)}</td><td>${fmt(totals.companySum)}</td><td>${fmt(totals.terminal)}</td><td>${fmt(totals.totalRevenue)}</td>
+    </tr></tfoot></table>
+  </div>
+  <p class="hint" style="margin-top:10px">Йўқотиш коэффициенти: ${computed[0] ? priceFor(computed[0].e.date).loss_coefficient : 0.986} (Созламалар → Нарх тарихидан олинади, кун бўйича ўзгариши мумкин).</p>`;
 }
 
 // ============================================================
@@ -862,16 +976,17 @@ async function addOtherExpense(){
 function tplSettings(){
   return `
   <div class="card group-settings">
-    <div class="section-title"><h2>Нарх тарихи (Сотув / Таннарх / Акциз)</h2></div>
-    <div class="table-wrap"><table><thead><tr><th>Сана (дан)</th><th>Сотув</th><th>Таннарх</th><th>Акциз</th></tr></thead>
-      <tbody>${state.prices.map(p=>`<tr><td>${p.effective_date}</td><td>${fmt(p.sale_price)}</td><td>${fmt(p.cost_price)}</td><td>${fmt(p.excise)}</td></tr>`).join('')}</tbody></table></div>
+    <div class="section-title"><h2>Нарх тарихи (Сотув / Таннарх / Акциз / Йўқотиш коэффициенти)</h2></div>
+    <div class="table-wrap"><table><thead><tr><th>Сана (дан)</th><th>Сотув</th><th>Таннарх</th><th>Акциз</th><th>Йўқотиш коэфф.</th></tr></thead>
+      <tbody>${state.prices.map(p=>`<tr><td>${p.effective_date}</td><td>${fmt(p.sale_price)}</td><td>${fmt(p.cost_price)}</td><td>${fmt(p.excise)}</td><td>${p.loss_coefficient}</td></tr>`).join('')}</tbody></table></div>
     <div class="confirm-wrap">
-      <p class="hint">⚠️ Бу узоқ муддат ўзгармайдиган рақам. Фақат нарх ҳақиқатан ҳам ўзгарган кунда янги қатор қўшинг — эски кунлар эски нархда ҳисобланаверади.</p>
+      <p class="hint">⚠️ Бу узоқ муддат ўзгармайдиган рақам. Фақат нарх ҳақиқатан ҳам ўзгарган кунда янги қатор қўшинг — эски кунлар эски нархда ҳисобланаверади. Йўқотиш коэффициенти — "Давлат ҳисоботи"да Агрес кўрсаткичини давлат ҳисобига мослаштириш учун ишлатилади (эски тизимда доим 0.986 бўлган).</p>
       <div class="row">
         <div class="field"><label>Амал қилиш санаси</label><input type="date" id="np_date"></div>
         <div class="field"><label>Сотув нархи</label><input type="number" id="np_sale"></div>
         <div class="field"><label>Таннарх</label><input type="number" id="np_cost"></div>
         <div class="field"><label>Акциз</label><input type="number" id="np_excise"></div>
+        <div class="field"><label>Йўқотиш коэфф.</label><input type="number" step="0.001" id="np_loss" value="0.986"></div>
       </div>
       <label style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="checkbox" id="np_confirm" style="width:auto"> Ҳа, нарх ҳақиқатан ҳам ўзгарди</label>
       <button class="btn small" onclick="addPrice()">Янги нарх қўшиш</button>
@@ -895,8 +1010,9 @@ function tplSettings(){
   </div>
 
   <div class="card group-settings">
-    <div class="section-title"><h2>Доимий харажатлар (Иш ҳақи / Банк кредити / Ер-мулк солиғи / Электр тарифи)</h2></div>
-    <div class="table-wrap"><table><thead><tr><th>Сана (дан)</th><th>Иш ҳақи</th><th>Банк кредити</th><th>Ер-мулк</th><th>Электр</th></tr></thead>
+    <div class="section-title"><h2>Доимий харажатлар (Иш ҳақи / Банк кредити / Ер-мулк солиғи / Электр)</h2></div>
+    <p class="hint">Электр — шу ойнинг ЖАМИ электр харажати (сўмда), тарифи эмас. Ҳар ой электр ҳисоби келгач, шу ерга шу ойнинг умумий суммасини янги қатор қилиб қўшинг — акс ҳолда "Ойлик даромад ҳисоботи"да электр харажати 0 (ёки эскирган) кўринади.</p>
+    <div class="table-wrap"><table><thead><tr><th>Сана (дан)</th><th>Иш ҳақи</th><th>Банк кредити</th><th>Ер-мулк</th><th>Электр (ойлик, жами)</th></tr></thead>
       <tbody>${state.fixedCosts.map(f=>`<tr><td>${f.effective_date}</td><td>${fmt(f.salary)}</td><td>${fmt(f.bank_loan_interest)}</td><td>${fmt(f.land_property_tax)}</td><td>${fmt(f.electricity_tariff)}</td></tr>`).join('')}</tbody></table></div>
     <div class="confirm-wrap">
       <div class="row">
@@ -904,7 +1020,7 @@ function tplSettings(){
         <div class="field"><label>Иш ҳақи</label><input type="number" id="fc_salary"></div>
         <div class="field"><label>Банк кредити</label><input type="number" id="fc_bank"></div>
         <div class="field"><label>Ер-мулк солиғи</label><input type="number" id="fc_land"></div>
-        <div class="field"><label>Электр тарифи</label><input type="number" id="fc_elec"></div>
+        <div class="field"><label>Электр (ойлик, жами сўм)</label><input type="number" id="fc_elec"></div>
       </div>
       <label style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="checkbox" id="fc_confirm" style="width:auto"> Ҳа, бу рақамлар ҳақиқатан ҳам ўзгарди</label>
       <button class="btn small" onclick="addFixedCost()">Янги қиймат қўшиш</button>
@@ -917,7 +1033,8 @@ async function addPrice(){
     effective_date: document.getElementById('np_date').value,
     sale_price: parseFloat(document.getElementById('np_sale').value),
     cost_price: parseFloat(document.getElementById('np_cost').value),
-    excise: parseFloat(document.getElementById('np_excise').value)
+    excise: parseFloat(document.getElementById('np_excise').value),
+    loss_coefficient: parseFloat(document.getElementById('np_loss').value)||0.986
   }, {onConflict:'effective_date'});
   if(error){ toast("Хатолик: "+error.message); return; }
   toast("Нарх қўшилди ✓"); await loadAll(); renderTab();
