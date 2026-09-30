@@ -141,6 +141,10 @@ function trainingToggleBtnHtml(){
   return `<button class="btn ${trainingMode?'':'secondary'} small" style="margin-bottom:12px" onclick="toggleTrainingMode()">${trainingMode?'🎓 Ўқув режими — YONIQ (босиб ўчиринг)':'🎓 Ўқув режимини ёқиш (машқ учун, ҳеч нарса сақланмайди)'}</button>`;
 }
 let activeTab = null;
+// Танланган станция: 'metan' | 'benzin' | 'umumiy' | null (ҳали танланмаган).
+// profile.station 'both' бўлганларгина (CEO/директор) буни ўзгартира олади,
+// бошқаларга логиндаёқ автоматик белгиланади.
+let currentStation = null;
 
 const fmt = n => (n===null||n===undefined||isNaN(n)) ? '—' : Math.round(n).toLocaleString('en-US').replace(/,/g,' ');
 const pct = n => (n===null||n===undefined||isNaN(n)) ? '—' : (n*100).toFixed(1)+'%';
@@ -198,6 +202,8 @@ async function afterLogin(session){
     return;
   }
   state.profile = profile;
+  const station = profile.station || 'both';
+  currentStation = (station === 'both') ? null : station; // 'both' -> танлов экранини кўрсатади
   await loadAll();
   renderShell();
 }
@@ -287,20 +293,40 @@ function companyTotals(){
 // ============================================================
 // SHELL / TABS
 // ============================================================
-function tabsForRole(role){
-  if(role === 'operator') return [['entry','Кунлик ҳисобот (метан)'],['benzin','Бензин']];
-  if(role === 'direktor') return [['overview','Умумий'],['reports','Ҳисоботлар'],['davlat','Давлат ҳисоботи'],['companies','Компаниялар'],['expenses','Харажатлар'],['benzin','Бензин'],['salaries','Ойликлар']];
-  return [['entry','Кунлик ҳисобот (метан)'],['overview','Умумий'],['reports','Ҳисоботлар'],['davlat','Давлат ҳисоботи'],['companies','Компаниялар'],['expenses','Харажатлар'],['benzin','Бензин'],['salaries','Ойликлар'],['settings','Созламалар']];
+// Ҳар бир станция (метан/бензин) ва "умумий ҳолат" учун алоҳида таб рўйхати —
+// улар бир-бирига умуман аралашмайди. Оператор фақат ўзига рухсат берилган
+// станциянинг табларини кўради (currentStation орқали ажратилади).
+function tabsForRole(role, station){
+  if(station === 'metan'){
+    if(role === 'operator') return [['entry','Кунлик ҳисобот']];
+    if(role === 'direktor') return [['overview','Умумий'],['reports','Ҳисоботлар'],['davlat','Давлат ҳисоботи'],['companies','Компаниялар'],['expenses','Харажатлар'],['salaries','Ойликлар']];
+    return [['entry','Кунлик ҳисобот'],['overview','Умумий'],['reports','Ҳисоботлар'],['davlat','Давлат ҳисоботи'],['companies','Компаниялар'],['expenses','Харажатлар'],['salaries','Ойликлар'],['settings','Созламалар']];
+  }
+  if(station === 'benzin'){
+    if(role === 'operator') return [['bz_daily','Кунлик ишлар']];
+    if(role === 'direktor') return [['bz_reports','Ҳисоботлар']];
+    return [['bz_daily','Кунлик ишлар'],['bz_reports','Ҳисоботлар'],['bz_settings','Созламалар']];
+  }
+  if(station === 'umumiy') return [['dashboard','Умумий ҳолат']];
+  return [];
 }
 
+// currentStation === null -> ҳали танланмаган (фақат profile.station==='both'
+// бўлганларда рўй беради) -> танлов экрани кўрсатилади.
 function renderShell(){
   const role = state.profile.role;
-  const tabs = tabsForRole(role);
-  if(!activeTab || !tabs.find(t=>t[0]===activeTab)) activeTab = tabs[0][0];
+  if(currentStation === null){ renderStationPicker(); return; }
+  const tabs = tabsForRole(role, currentStation);
+  if(!activeTab || !tabs.find(t=>t[0]===activeTab)) activeTab = tabs.length ? tabs[0][0] : null;
+  const canSwitch = (state.profile.station || 'both') === 'both';
+  const stationLabel = currentStation==='metan' ? 'Метан' : (currentStation==='benzin' ? 'Бензин' : 'Умумий ҳолат');
   document.getElementById('app').innerHTML = `
     <div class="topbar">
-      <div><h1 style="margin-bottom:0">Мангит Метан</h1><p class="who">${esc(state.profile.full_name)} — ${roleLabel(role)}</p></div>
-      <button class="btn secondary small" onclick="doLogout()">Чиқиш</button>
+      <div><h1 style="margin-bottom:0">Мангит Метан — ${stationLabel}</h1><p class="who">${esc(state.profile.full_name)} — ${roleLabel(role)}</p></div>
+      <div style="display:flex;gap:8px">
+        ${canSwitch ? `<button class="btn secondary small" onclick="switchStation()">🔁 Станция</button>` : ''}
+        <button class="btn secondary small" onclick="doLogout()">Чиқиш</button>
+      </div>
     </div>
     <div class="tabs" id="tabsRow"></div>
     <div id="tabBody"></div>`;
@@ -308,6 +334,28 @@ function renderShell(){
     `<button class="tab-btn ${id===activeTab?'active':''}" onclick="switchTab('${id}')">${label}</button>`).join('');
   renderTab();
 }
+// Рўйхатдан ўтгандан кейинги (ёки станция алмаштиргандаги) танлов экрани.
+// 'Умумий ҳолат' иконкаси фақат директор/CEO'га кўринади.
+function renderStationPicker(){
+  const role = state.profile.role;
+  const showUmumiy = (role === 'direktor' || role === 'ceo');
+  document.getElementById('app').innerHTML = `
+    <div class="topbar">
+      <div><h1 style="margin-bottom:0">Мангит Метан</h1><p class="who">${esc(state.profile.full_name)} — ${roleLabel(role)}</p></div>
+      <button class="btn secondary small" onclick="doLogout()">Чиқиш</button>
+    </div>
+    <div class="card" style="text-align:center;padding:28px 16px">
+      <h2 style="margin-top:0">Қайси станция?</h2>
+      <p class="hint">Ишлайдиган бўлимни танланг — ҳар бирининг ҳисоботи алоҳида.</p>
+      <div class="row" style="justify-content:center;flex-wrap:wrap;gap:16px;margin-top:20px">
+        <button class="btn" style="min-width:160px;padding:26px 18px;font-size:1.1rem" onclick="chooseStation('metan')">🔥<br>Метан</button>
+        <button class="btn" style="min-width:160px;padding:26px 18px;font-size:1.1rem" onclick="chooseStation('benzin')">⛽<br>Бензин</button>
+        ${showUmumiy ? `<button class="btn secondary" style="min-width:160px;padding:26px 18px;font-size:1.1rem" onclick="chooseStation('umumiy')">📊<br>Умумий ҳолат</button>` : ''}
+      </div>
+    </div>`;
+}
+function chooseStation(id){ currentStation = id; activeTab = null; renderShell(); }
+function switchStation(){ currentStation = null; activeTab = null; renderShell(); }
 function roleLabel(r){ return r==='ceo'?'CEO':(r==='direktor'?'Директор':'Оператор'); }
 function switchTab(id){ activeTab = id; renderShell(); }
 
@@ -321,8 +369,11 @@ function renderTab(){
   else if(activeTab==='companies') body.innerHTML = tplCompanies(role);
   else if(activeTab==='expenses') body.innerHTML = tplExpenses(role);
   else if(activeTab==='settings') body.innerHTML = tplSettings();
-  else if(activeTab==='benzin') body.innerHTML = tplBenzin(role);
   else if(activeTab==='salaries') body.innerHTML = tplSalaries(role);
+  else if(activeTab==='bz_daily') body.innerHTML = tplBenzinDaily(role);
+  else if(activeTab==='bz_reports') body.innerHTML = tplBenzinReports();
+  else if(activeTab==='bz_settings') body.innerHTML = tplBenzinSettings();
+  else if(activeTab==='dashboard') body.innerHTML = tplDashboard();
   afterRenderTab();
 }
 function afterRenderTab(){
@@ -330,8 +381,14 @@ function afterRenderTab(){
     buildPumpFields(); buildCompanySelects(); renderPendingLists(); recalcPreview();
     document.getElementById('f_date').value = todayISO();
   }
-  if(activeTab==='benzin'){
-    afterRenderBenzin();
+  if(activeTab==='bz_daily'){
+    afterRenderBenzinDaily();
+  }
+  if(activeTab==='bz_reports'){
+    afterRenderBenzinReports();
+  }
+  if(activeTab==='dashboard'){
+    afterRenderDashboard();
   }
   if(activeTab==='salaries'){
     afterRenderSalaries();
@@ -1149,8 +1206,8 @@ function tplSettings(){
   return `
   <div class="card">
     <div class="section-title"><h2>Захира нусха (Excel)</h2></div>
-    <p class="hint">Барча маълумот (кунлик ҳисоботлар, бензин, компаниялар, ойликлар, ойлик хулосалар) битта Excel файлга тушади ва компьютерингизга юкланади. Хавфсизлик учун ҳар ойда бир марта олиб, алоҳида жойда (масалан Google Drive) сақлаб қўйишни тавсия қиламиз.</p>
-    <button class="btn secondary" onclick="exportBackupExcel()">📥 Excel'га юклаб олиш</button>
+    <p class="hint">Метан станциясига тегишли ҳамма маълумот (кунлик ҳисоботлар, компаниялар, ойликлар, ойлик хулосалар) алоҳида Excel файлга тушади ва компьютерингизга юкланади. Бензинники ундан алоҳида — "Бензин → Ҳисоботлар" бўлимида. Хавфсизлик учун ҳар ойда бир марта олиб, алоҳида жойда (масалан Google Drive) сақлаб қўйишни тавсия қиламиз.</p>
+    <button class="btn secondary" onclick="exportMetanExcel()">📥 Метан — Excel'га юклаб олиш</button>
   </div>
   <div class="card group-settings">
     <div class="section-title"><h2>Нарх тарихи (Сотув / Таннарх / Акциз / Йўқотиш коэффициенти)</h2></div>
@@ -1367,11 +1424,9 @@ function renderBenzinPL(){
     ${zeroExcise ? `<div class="review-warn" style="margin-top:10px">⚠ Баъзи ёқилғи турларида акциз ставкаси 0 турибди (Созламалар → Бензин созламаларида ҳали киритилмаган) — демак юқоридаги фойда ҳақиқийдан КЎПРОҚ кўринади. Бухгалтер билан аниқлаштириб киритинг.</div>` : ''}`;
 }
 
-function tplBenzin(role){
+function tplBenzinDaily(role){
   const canEdit = role==='operator' || role==='ceo';
-  const canSettings = role==='ceo';
   const activeDispensers = state.dispensers.filter(d=>d.active);
-  const stock = benzinStockSummary();
 
   const entryFormHtml = !canEdit ? '' : `
   ${trainingToggleBtnHtml()}
@@ -1442,7 +1497,12 @@ function tplBenzin(role){
     </div>
   </div>`;
 
-  const stockHtml = `
+  return entryFormHtml + receiveFormHtml;
+}
+
+function tplBenzinReports(){
+  const stock = benzinStockSummary();
+  return `
   <div class="card group-income">
     <div class="section-title"><h2>Бензин — ойлик ялпи фойда ҳисоби</h2><input type="month" id="bpl_month" value="${currentMonthKey()}" style="width:auto"></div>
     <div id="bplDetail"></div>
@@ -1461,9 +1521,16 @@ function tplBenzin(role){
         `<tr><td>${e.date}</td><td>${esc(e.operator_name)}</td><td>${fmt(e.naqd + Number(e.uzkard||0) + Number(e.xumo||0))}</td><td>${fmt(e.naqd)}</td></tr>`
       ).join('') || `<tr><td colspan="4" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
     </div>
+  </div>
+  <div class="card">
+    <div class="section-title"><h2>Захира нусха (Excel)</h2></div>
+    <p class="hint">Бензин станциясига тегишли ҳамма маълумот (кунлик ҳисоботлар, қабул қилишлар, ойлик хулоса) алоҳида файлга тушади.</p>
+    <button class="btn secondary" onclick="exportBenzinExcel()">📥 Бензин — Excel'га юклаб олиш</button>
   </div>`;
+}
 
-  const settingsHtml = !canSettings ? '' : `
+function tplBenzinSettings(){
+  return `
   <div class="card group-settings">
     <div class="section-title"><h2>Бензин созламалари</h2></div>
     <p class="hint">Янги ёқилғи тури, нарх ва калонкаларга қайси марка бириктирилганини шу ерда бошқарасиз.</p>
@@ -1490,19 +1557,73 @@ function tplBenzin(role){
     <div class="table-wrap"><table><thead><tr><th>Тур</th><th>Зичлик (кг/л)</th></tr></thead>
       <tbody>${state.fuelTypes.map(f=>`<tr><td>${esc(f.name)}</td><td><input type="number" step="0.001" value="${f.density_kg_per_liter||''}" placeholder="масалан 0.750" onchange="setFuelDensity('${f.id}', this.value)"></td></tr>`).join('')}</tbody></table></div>
   </div>`;
-
-  return entryFormHtml + receiveFormHtml + stockHtml + settingsHtml;
 }
 
-function afterRenderBenzin(){
+function afterRenderBenzinDaily(){
   const sel = document.getElementById('bz_sale_company');
   if(sel) sel.innerHTML = state.companies.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
   benzinPending = { sales: [] };
   renderBenzinSalesList();
   document.querySelectorAll('#bzDispenserFields input').forEach(inp=>inp.addEventListener('input', recalcBenzinPreview));
   recalcBenzinPreview();
+}
+function afterRenderBenzinReports(){
   const plMonth = document.getElementById('bpl_month');
   if(plMonth){ renderBenzinPL(); plMonth.addEventListener('change', renderBenzinPL); }
+}
+
+// Ойлар кесимида бензин сотув суммаси — monthlySalesSeries()'нинг бензин
+// эгизаги, "Умумий ҳолат" графиги учун.
+function benzinMonthlySeries(){
+  const calc = benzinComputeAll();
+  const byMonth = {};
+  state.benzinEntries.forEach(e=>{
+    if(!e.date) return;
+    const m = e.date.slice(0,7);
+    const rev = (calc[e.id] && calc[e.id].revenue) || 0;
+    byMonth[m] = (byMonth[m]||0) + rev;
+  });
+  const months = Object.keys(byMonth).sort().slice(-12);
+  return months.map(m=>({label:m.slice(2), value:byMonth[m]}));
+}
+
+// ============================================================
+// УМУМИЙ ҲОЛАТ — фақат директор/CEO учун, иккала станциянинг
+// даромад ҳаракатини бир жойда, соддароқ қилиб кўрсатади.
+// ДИҚҚАТ: Метан — СОФ фойда (ҳамма харажат/солиқдан кейин), Бензин
+// эса ҳозирча фақат ЯЛПИ фойда (умумий харажатлар — иш ҳақи, банк,
+// ер солиғи — ҳали икки станцияга бўлинмаган) — шунинг учун булар
+// ҚЎШИЛМАЙДИ, алоҳида-алоҳида кўрсатилади.
+// ============================================================
+function tplDashboard(){
+  const monthStr = currentMonthKey();
+  const mPL = computeMonthlyPL(monthStr);
+  const bPL = computeBenzinMonthlyPL(monthStr);
+  return `
+  <div class="card">
+    <div class="section-title"><h2>Умумий ҳолат — ${monthStr}</h2></div>
+    <p class="hint">Иккала станциянинг (Метан ва Бензин) шу ойдаги молиявий ҳаракати. Метан — СОФ фойда (барча харажат ва солиқлардан кейин). Бензин — ҳозирча фақат ЯЛПИ фойда (умумий харажатлар — иш ҳақи, банк, ер солиғи — ҳали иккита станцияга бўлинмагани сабабли). Шунинг учун иккиси ҚЎШИЛМАЙДИ, алоҳида-алоҳида кўрсатилади.</p>
+    <div class="tile-row">
+      <div class="tile"><div class="label">Метан — сотув суммаси</div><div class="value">${fmt(mPL.revenue)} сўм</div></div>
+      <div class="tile"><div class="label">Метан — соф фойда</div><div class="value ${mPL.netProfit<0?'bad':'good'}">${fmt(mPL.netProfit)} сўм</div></div>
+      <div class="tile"><div class="label">Бензин — сотув суммаси</div><div class="value">${fmt(bPL.revenue)} сўм</div></div>
+      <div class="tile"><div class="label">Бензин — ялпи фойда</div><div class="value ${bPL.grossProfit<0?'bad':'good'}">${fmt(bPL.grossProfit)} сўм</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="section-title"><h2>Метан — ойлар кесимида сотув суммаси</h2></div>
+    <div id="dashChartMetan"></div>
+  </div>
+  <div class="card">
+    <div class="section-title"><h2>Бензин — ойлар кесимида сотув суммаси</h2></div>
+    <div id="dashChartBenzin"></div>
+  </div>`;
+}
+function afterRenderDashboard(){
+  const m = document.getElementById('dashChartMetan');
+  const b = document.getElementById('dashChartBenzin');
+  if(m) m.innerHTML = svgBarChart(monthlySalesSeries(), {unit:' сўм'});
+  if(b) b.innerHTML = svgBarChart(benzinMonthlySeries(), {unit:' сўм'});
 }
 
 function recalcBenzinPreview(){
@@ -1866,7 +1987,9 @@ async function addEmployeeSalary(){
 // EXCEL ЗАХИРА НУСХА — барча маълумотни бир файлга, бир нечта варақда.
 // (SheetJS кутубхонаси <head>да юкланган.)
 // ============================================================
-function exportBackupExcel(){
+// Метан — Excel захира нусхаси. Фақат метан станциясига тегишли маълумот
+// (бензинники алоҳида функцияда — иккиси ҳеч қачон бир файлга аралашмайди).
+function exportMetanExcel(){
   if(typeof XLSX === 'undefined'){ toast("Excel кутубхонаси юкланмади — интернетни текшириб, саҳифани қайта юкланг"); return; }
   const wb = XLSX.utils.book_new();
   const addSheet = (name, rows) => {
@@ -1875,7 +1998,7 @@ function exportBackupExcel(){
     XLSX.utils.book_append_sheet(wb, ws, name.slice(0,31));
   };
 
-  addSheet('Kunlik hisobot (metan)', state.entries.map(e=>({
+  addSheet('Kunlik hisobot', state.entries.map(e=>({
     Sana:e.date, Operator:e.operator_name, SotilganM3:e.sold_m3, Agres:e.agres, SotuvSummasi:e.sales_value,
     Naqt:e.naqt, Uzcard:e.uzcard, Humo:e.humo, QR:e.qr, Narx:e.price, Izoh:e.izoh
   })));
@@ -1886,6 +2009,36 @@ function exportBackupExcel(){
     Sana:p.date, Kompaniya:(state.companies.find(c=>c.id===p.company_id)||{}).name||'', Summa:p.amount, Izoh:p.note, KimKiritgan:p.created_by_name
   })));
   addSheet('Kompaniyalar (balans)', companyTotals().map(c=>({ Nomi:c.name, SotilganM3:c.m3, SotilganSumma:c.sold, Tolangan:c.paid, Balans:c.paid-c.sold })));
+  addSheet('Xodimlar', state.employees.map(e=>({ Ism:e.full_name, Lavozim:e.position, Faol:e.active?'Ha':"Yo'q" })));
+  addSheet('Oyliklar tarixi', state.employeeSalaries.map(s=>({
+    Xodim:(state.employees.find(e=>e.id===s.employee_id)||{}).full_name||'', SanaDan:s.effective_date, Summa:s.amount
+  })));
+  addSheet('Narxlar', state.prices);
+  addSheet('Soliq stavkalari', state.taxRates);
+  addSheet('Doimiy xarajatlar', state.fixedCosts);
+
+  const metanMonths = [...new Set(state.entries.map(e=>e.date && e.date.slice(0,7)).filter(Boolean))].sort();
+  addSheet('Oylik hisobot', metanMonths.map(m=>{
+    const pl = computeMonthlyPL(m);
+    return { Oy:m, Daromad:pl.revenue, XarajatlarJami:pl.expensesTotal, Aksiz:pl.excise, NDS_netto:pl.ndsNet,
+      IjtimoiySoliq:pl.socialAmount, Foyda:pl.profitBeforeTax, FoydaSoligi:pl.profitTaxAmount, SofFoyda:pl.netProfit };
+  }));
+
+  XLSX.writeFile(wb, `Mangit_Metan_${todayISO()}.xlsx`);
+  toast("Юклаб олинди ✓");
+}
+
+// Бензин — Excel захира нусхаси. Метанники билан ҳеч қачон бир файлга
+// қўшилмайди — CEO/директор буни "Бензин → Ҳисоботлар"дан юклайди.
+function exportBenzinExcel(){
+  if(typeof XLSX === 'undefined'){ toast("Excel кутубхонаси юкланмади — интернетни текшириб, саҳифани қайта юкланг"); return; }
+  const wb = XLSX.utils.book_new();
+  const addSheet = (name, rows) => {
+    const safe = (rows && rows.length) ? rows : [{}];
+    const ws = XLSX.utils.json_to_sheet(safe);
+    XLSX.utils.book_append_sheet(wb, ws, name.slice(0,31));
+  };
+
   addSheet('Benzin kunlik', state.benzinEntries.map(e=>({
     Sana:e.date, Operator:e.operator_name, Naqd:e.naqd, Uzkard:e.uzkard, Xumo:e.xumo, Kechagi:e.kechagi_note, Izoh:e.izoh,
     Korsatkichlar: JSON.stringify(e.readings)
@@ -1897,28 +2050,16 @@ function exportBackupExcel(){
   addSheet('Benzin kompaniya sotuvi', state.benzinCompanySales.map(s=>({
     Kompaniya:(state.companies.find(c=>c.id===s.company_id)||{}).name||'', Turi:fuelTypeName(s.fuel_type_id), Litr:s.liters, Narx:s.price, Summa:s.sum
   })));
-  addSheet('Xodimlar', state.employees.map(e=>({ Ism:e.full_name, Lavozim:e.position, Faol:e.active?'Ha':"Yo'q" })));
-  addSheet('Oyliklar tarixi', state.employeeSalaries.map(s=>({
-    Xodim:(state.employees.find(e=>e.id===s.employee_id)||{}).full_name||'', SanaDan:s.effective_date, Summa:s.amount
-  })));
-  addSheet('Narxlar (metan)', state.prices);
-  addSheet('Soliq stavkalari', state.taxRates);
-  addSheet('Doimiy xarajatlar', state.fixedCosts);
   addSheet('Benzin narxlari', state.fuelPrices.map(p=>({ Turi:fuelTypeName(p.fuel_type_id), SanaDan:p.effective_date, Sotuv:p.sale_price, Tannarx:p.cost_price, Aksiz:p.excise })));
+  addSheet('Zahira holati', benzinStockSummary().map(s=>({ Turi:s.fuelType.name, JamiKelgan:s.delivered, JamiSotilgan:s.sold, HisobiyQoldiq:s.balance })));
 
-  const metanMonths = [...new Set(state.entries.map(e=>e.date && e.date.slice(0,7)).filter(Boolean))].sort();
-  addSheet('Oylik hisobot (metan)', metanMonths.map(m=>{
-    const pl = computeMonthlyPL(m);
-    return { Oy:m, Daromad:pl.revenue, XarajatlarJami:pl.expensesTotal, Aksiz:pl.excise, NDS_netto:pl.ndsNet,
-      IjtimoiySoliq:pl.socialAmount, Foyda:pl.profitBeforeTax, FoydaSoligi:pl.profitTaxAmount, SofFoyda:pl.netProfit };
-  }));
   const benzinMonths = [...new Set(state.benzinEntries.map(e=>e.date && e.date.slice(0,7)).filter(Boolean))].sort();
-  addSheet('Oylik hisobot (benzin)', benzinMonths.map(m=>{
+  addSheet('Oylik hisobot (yalpi foyda)', benzinMonths.map(m=>{
     const pl = computeBenzinMonthlyPL(m);
     return { Oy:m, Daromad:pl.revenue, Tannarx:pl.cogs, Aksiz:pl.excise, NDS_netto:pl.ndsNet, YalpiFoyda:pl.grossProfit };
   }));
 
-  XLSX.writeFile(wb, `Mangit_Metan_zaxira_${todayISO()}.xlsx`);
+  XLSX.writeFile(wb, `Mangit_Benzin_${todayISO()}.xlsx`);
   toast("Юклаб олинди ✓");
 }
 
