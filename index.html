@@ -4,19 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Мангит Метан</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600&display=swap">
 <style>
 :root{
-  --bg:#F7F5F2; --surface:#FFFFFF; --border:#E3DED6; --fg:#241F1A; --muted:#7A7168;
-  --accent:#B5651D; --accent-fg:#FFFFFF; --good:#2E7D4F; --bad:#B3261E; --warn:#B8860B; --orange:#C1590B;
-  --blue:#2B5F8A; --purple:#6B4E9E;
-  --font-display:'Fraunces',Georgia,serif; --font-body:'Inter',system-ui,-apple-system,sans-serif; --font-mono:'JetBrains Mono',ui-monospace,monospace;
+  --bg:#F1F5FB; --surface:#FFFFFF; --border:#DCE6F2; --fg:#132236; --muted:#5B7089;
+  --accent:#2563EB; --accent-fg:#FFFFFF; --good:#16A34A; --bad:#DC2626; --warn:#D97706; --orange:#EA580C;
+  --blue:#0EA5E9; --purple:#7C3AED;
+  --font-display:'Inter',system-ui,-apple-system,sans-serif; --font-body:'Inter',system-ui,-apple-system,sans-serif; --font-mono:'JetBrains Mono',ui-monospace,monospace;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#181512; --surface:#221E19; --border:#3A342C; --fg:#F1ECE4; --muted:#A79E92;
-    --accent:#E08A3C; --accent-fg:#181512; --good:#5FBE84; --bad:#F2938A; --warn:#E0B84C; --orange:#F0954D;
-    --blue:#7FB0DD; --purple:#B69AE6;
+    --bg:#0B1220; --surface:#121D30; --border:#223148; --fg:#E7EEF9; --muted:#8CA0BC;
+    --accent:#4C8DFF; --accent-fg:#0B1220; --good:#34D399; --bad:#F87171; --warn:#FBBF24; --orange:#FB923C;
+    --blue:#38BDF8; --purple:#A78BFA;
   }
 }
 *{box-sizing:border-box}
@@ -32,7 +32,7 @@ h3{font-size:.92rem;color:var(--muted);text-transform:uppercase;letter-spacing:.
 .tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;position:sticky;top:0;background:var(--bg);padding-block:6px;z-index:5}
 .tab-btn{padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--fg);font-size:.85rem;font-weight:600;cursor:pointer}
 .tab-btn.active{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 1px 2px rgba(19,34,54,.04)}
 .card.group-income{border-left:4px solid var(--good)}
 .card.group-expense{border-left:4px solid var(--bad)}
 .card.group-tax{border-left:4px solid var(--purple)}
@@ -44,7 +44,8 @@ label{font-size:.78rem;color:var(--muted);font-weight:600}
 input,select,textarea{font-family:var(--font-body);font-size:.95rem;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--fg);width:100%}
 input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
 textarea{min-height:60px;resize:vertical}
-.btn{padding:10px 16px;border-radius:8px;border:none;background:var(--accent);color:var(--accent-fg);font-weight:700;font-size:.9rem;cursor:pointer}
+.btn{padding:10px 16px;border-radius:9px;border:none;background:var(--accent);color:var(--accent-fg);font-weight:700;font-size:.9rem;cursor:pointer;transition:filter .15s}
+.btn:not(:disabled):hover{filter:brightness(1.08)}
 .btn.secondary{background:transparent;border:1px solid var(--border);color:var(--fg)}
 .btn.danger{background:var(--bad);color:#fff}
 .btn.small{padding:6px 10px;font-size:.8rem}
@@ -53,7 +54,7 @@ textarea{min-height:60px;resize:vertical}
 .list-item:last-child{border-bottom:none}
 .list-item .del{margin-left:auto;background:none;border:none;color:var(--bad);cursor:pointer;font-size:1rem;padding:2px 8px}
 .tile-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px}
-.tile{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;box-shadow:0 1px 2px rgba(19,34,54,.04)}
 .tile .label{font-size:.72rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em}
 .tile .value{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:1.2rem;font-weight:700;margin-top:4px}
 .tile .value.good{color:var(--good)} .tile .value.bad{color:var(--bad)}
@@ -345,17 +346,52 @@ function companyTotals(station){
 // станциянинг табларини кўради (currentStation орқали ажратилади).
 function tabsForRole(role, station){
   if(station === 'metan'){
-    if(role === 'operator') return [['entry','Кунлик ҳисобот'],['reports','Ҳисоботлар'],['davlat','Давлат ҳисоботи'],['gap','Фарқ фонди']];
-    if(role === 'direktor') return [['overview','Умумий'],['reports','Ҳисоботлар'],['davlat','Давлат ҳисоботи'],['gap','Фарқ фонди'],['companies','Компаниялар'],['expenses','Харажатлар'],['salaries','Ойликлар']];
-    return [['entry','Кунлик ҳисобот'],['overview','Умумий'],['reports','Ҳисоботлар'],['davlat','Давлат ҳисоботи'],['gap','Фарқ фонди'],['companies','Компаниялар'],['expenses','Харажатлар'],['salaries','Ойликлар'],['settings','Созламалар']];
+    if(role === 'operator') return [['entry','📝 Кунлик ҳисобот'],['reports','📊 Ҳисоботлар'],['davlat','🏛 Давлат ҳисоботи'],['gap','💰 Фарқ фонди']];
+    if(role === 'direktor') return [['overview','🏠 Умумий'],['reports','📊 Ҳисоботлар'],['davlat','🏛 Давлат ҳисоботи'],['gap','💰 Фарқ фонди'],['companies','🏢 Компаниялар'],['expenses','💸 Харажатлар'],['salaries','👥 Ойликлар']];
+    return [['entry','📝 Кунлик ҳисобот'],['overview','🏠 Умумий'],['reports','📊 Ҳисоботлар'],['davlat','🏛 Давлат ҳисоботи'],['gap','💰 Фарқ фонди'],['companies','🏢 Компаниялар'],['expenses','💸 Харажатлар'],['salaries','👥 Ойликлар'],['settings','⚙️ Созламалар']];
   }
   if(station === 'benzin'){
-    if(role === 'operator') return [['bz_daily','Кунлик ишлар']];
-    if(role === 'direktor') return [['bz_reports','Ҳисоботлар'],['bz_expenses','Харажатлар'],['bz_salaries','Ойликлар']];
-    return [['bz_daily','Кунлик ишлар'],['bz_reports','Ҳисоботлар'],['bz_expenses','Харажатлар'],['bz_salaries','Ойликлар'],['bz_settings','Созламалар']];
+    if(role === 'operator') return [['bz_daily','📝 Кунлик ишлар']];
+    if(role === 'direktor') return [['bz_reports','📊 Ҳисоботлар'],['bz_expenses','💸 Харажатлар'],['bz_salaries','👥 Ойликлар']];
+    return [['bz_daily','📝 Кунлик ишлар'],['bz_reports','📊 Ҳисоботлар'],['bz_expenses','💸 Харажатлар'],['bz_salaries','👥 Ойликлар'],['bz_settings','⚙️ Созламалар']];
   }
-  if(station === 'umumiy') return [['dashboard','Умумий ҳолат']];
+  if(station === 'umumiy') return [['dashboard','📈 Умумий ҳолат']];
   return [];
+}
+// Табларни мантиқий гуруҳларга ажратиш — навигацияда гуруҳлар орасига
+// нозик ажратувчи чизиқ қўйилади (оддий бир қатор рўйхат эмас).
+function tabGroup(id){
+  if(id==='entry' || id==='bz_daily') return 'work';
+  if(id==='overview' || id==='dashboard') return 'overview';
+  if(id==='reports' || id==='davlat' || id==='gap' || id==='bz_reports') return 'reports';
+  if(id==='companies' || id==='expenses' || id==='salaries' || id==='bz_expenses' || id==='bz_salaries') return 'manage';
+  if(id==='settings' || id==='bz_settings') return 'system';
+  return 'other';
+}
+// Минимал, монохром (line-style) иконкалар — ранг-баранг эмодзи эмас,
+// шунинг учун жиддий/корпоратив кўринади. currentColor орқали фаол/
+// нофаол ҳолатга қараб ранги ўзи ўзгаради.
+const TAB_ICONS = {
+  entry: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  bz_daily: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  overview: '<path d="M3 9l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/>',
+  dashboard: '<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>',
+  reports: '<path d="M3 3v18h18"/><rect x="7" y="13" width="3" height="5"/><rect x="12" y="9" width="3" height="9"/><rect x="17" y="5" width="3" height="13"/>',
+  bz_reports: '<path d="M3 3v18h18"/><rect x="7" y="13" width="3" height="5"/><rect x="12" y="9" width="3" height="9"/><rect x="17" y="5" width="3" height="13"/>',
+  davlat: '<path d="M3 21h18"/><path d="M4 10v11"/><path d="M20 10v11"/><path d="M5 6l7-4 7 4"/><path d="M3 10h18"/><path d="M8 14v3"/><path d="M12 14v3"/><path d="M16 14v3"/>',
+  gap: '<path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h3v-4Z"/>',
+  companies: '<rect x="4" y="2" width="16" height="20" rx="1"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M12 6h.01M16 6h.01M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01"/>',
+  expenses: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>',
+  bz_expenses: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>',
+  salaries: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  bz_salaries: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>',
+  bz_settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>',
+};
+function tabIconSvg(id){
+  const p = TAB_ICONS[id];
+  if(!p) return '';
+  return `<svg class="tab-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
 }
 
 // currentStation === null -> ҳали танланмаган (фақат profile.station==='both'
