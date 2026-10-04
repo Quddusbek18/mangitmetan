@@ -1696,7 +1696,12 @@ function benzinStockSummary(){
 // ҳисобланади — иккаласи АРАЛАШТИРИЛМАЙДИ. Таннархи қоғозда йўқ партия
 // (яъни накладной топилмаган кун) учун ёки партиялар тугаб қолса,
 // Созламалардаги жорий таннарх қиймати захира сифатида ишлатилади.
+// Ҳар бир ФИФО "олиш" ҳаракати шу ерга ёзилади (benzinFifoCogs() чақирилганда
+// қайта тўлдирилади) — ойлик ҳисоботда "қайси партиядан қанча сотилди"
+// шаффофлигини кўрсатиш учун (пастга қаранг: benzinMonthlyBatchBreakdown).
+let FIFO_BATCH_EVENTS = [];
 function benzinFifoCogs(){
+  FIFO_BATCH_EVENTS = [];
   const batchesByFuel = {};
   state.benzinDeliveries.slice()
     .sort((a,b)=> a.date < b.date ? -1 : (a.date > b.date ? 1 : 0))
@@ -1728,11 +1733,13 @@ function benzinFifoCogs(){
         cost += take * cpl;
         b.remaining -= take;
         need -= take;
+        FIFO_BATCH_EVENTS.push({ entryDate: e.date, ftId, batchDate: b.date, costPerLiter: cpl, liters: take, cost: take*cpl });
       }
       if(need > 0){
         // Партиялар тугади / ёзилмаган — жорий (созламадаги) таннархдан фойдаланамиз.
         const cpl = fuelPriceRowFor(ftId, e.date).cost_price;
         cost += need * cpl;
+        FIFO_BATCH_EVENTS.push({ entryDate: e.date, ftId, batchDate: null, costPerLiter: cpl, liters: need, cost: need*cpl });
       }
       byFuel[ftId] = { liters: c.soldByFuel[ftId], cogs: cost };
       totalCogs += cost;
@@ -1740,6 +1747,25 @@ function benzinFifoCogs(){
     cogsByEntry[e.id] = { byFuel, totalCogs };
   });
   return cogsByEntry;
+}
+
+// Шаффофлик учун: шу ойда сотилган таннарх АЙНАН ҚАЙСИ партия(лар)дан
+// йиғилганини кўрсатади (ёқилғи тури бўйича, партия санаси ва нархи
+// билан). Бир ой ичида эски ва янги партиядан аралаш сотилиши мумкин —
+// шуни ОЧИҚ кўрсатади, "ўртача" рақам ортида яшириб қўймайди.
+function benzinMonthlyBatchBreakdown(monthStr){
+  benzinFifoCogs(); // FIFO_BATCH_EVENTS'ни жорий маълумот асосида тўлдиради
+  const monthEvents = FIFO_BATCH_EVENTS.filter(ev => ev.entryDate && ev.entryDate.slice(0,7)===monthStr);
+  const grouped = {};
+  monthEvents.forEach(ev=>{
+    const key = ev.ftId + '|' + (ev.batchDate || 'joriy');
+    if(!grouped[key]) grouped[key] = { ftId: ev.ftId, batchDate: ev.batchDate, costPerLiter: ev.costPerLiter, liters: 0, cost: 0 };
+    grouped[key].liters += ev.liters;
+    grouped[key].cost += ev.cost;
+  });
+  return Object.values(grouped)
+    .map(g => ({ ...g, fuelName: fuelTypeName(g.ftId) }))
+    .sort((a,b)=> a.fuelName===b.fuelName ? (a.batchDate||'9999').localeCompare(b.batchDate||'9999') : a.fuelName.localeCompare(b.fuelName));
 }
 
 // Бензиннинг ойлик "қанча реал даромад қолиши" ҳисоби. МУҲИМ ЧЕКЛОВ:
@@ -1788,7 +1814,15 @@ function computeBenzinMonthlyPL(monthStr){
   const tax = taxFor(monthStr+'-01');
   const ndsRate = Number(tax.nds_rate)||0;
   const outputVat = revenue * (ndsRate/(1+ndsRate));
-  const inputVat = (cogs + electricity) * (ndsRate/(1+ndsRate));
+  // НДС кирими — РАСМИЙ қоида бўйича ТТН (харид) ҚАЙСИ ОЙГА тегишли бўлса,
+  // шу ойга ёзилади — товар қачон сотилганига боғлиқ эмас. Шунинг учун
+  // таннарх (cogs, ФИФО — сотилган ойга боғлиқ, фойда ҳисоби учун тўғри)
+  // билан НДС кирими (харид ойига боғлиқ, солиқ қоидаси учун тўғри) ОНГЛИ
+  // равишда АЖРАТИЛГАН — булар баъзан турли сон бўлиши мумкин, бу хато эмас.
+  const monthlyPurchases = state.benzinDeliveries
+    .filter(d=>d.date && d.date.slice(0,7)===monthStr)
+    .reduce((s,d)=>s+(Number(d.total_sum)||0),0);
+  const inputVat = (monthlyPurchases + electricity) * (ndsRate/(1+ndsRate));
   const ndsNet = outputVat - inputVat;
   const socialAmount = salary * (Number(tax.social_tax_rate)||0);
 
@@ -1798,7 +1832,8 @@ function computeBenzinMonthlyPL(monthStr){
   const netProfit = profitBeforeTax - profitTaxAmount;
 
   return { count: monthEntries.length, revenue, byFuelRows, cogs, excise, outputVat, inputVat, ndsNet, grossProfit,
-    electricity, salary, otherExp, expensesTotal, socialAmount, profitBeforeTax, profitTaxAmount, netProfit, tax };
+    electricity, salary, otherExp, expensesTotal, socialAmount, profitBeforeTax, profitTaxAmount, netProfit, tax,
+    monthlyPurchases };
 }
 function renderBenzinPL(){
   const monthStr = document.getElementById('bpl_month').value || currentMonthKey();
@@ -1807,13 +1842,18 @@ function renderBenzinPL(){
   if(!box) return;
   const row = (label, value, opts={}) => `<div class="pl-row${opts.bold?' pl-bold':''}${opts.indent?' pl-indent':''}"><span>${label}</span><span class="${opts.cls||''}">${value}</span></div>`;
   const zeroExcise = pl.byFuelRows.some(r=>r.excise===0);
+  const batchRows = benzinMonthlyBatchBreakdown(monthStr);
   box.innerHTML = `
     <p class="hint" style="margin-bottom:10px">${pl.count} та кунлик ҳисобот асосида, ФИФО (аввал келган — аввал сотилган) таннарх ҳисоби бўйича.</p>
     <div class="pl-group-title">Даромад</div>
     ${row('Сотув суммаси (жами)', fmt(pl.revenue)+" сўм")}
-    <div class="pl-group-title">Таннарх (ёқилғи тури бўйича, ФИФО)</div>
-    ${pl.byFuelRows.map(r=>row(esc(r.name)+' — '+fmt(r.liters)+' л × '+fmt(r.costPrice), fmt(r.liters*r.costPrice)+" сўм", {indent:true})).join('') || row('—','0 сўм',{indent:true})}
+    <div class="pl-group-title">Таннарх (ёқилғи тури бўйича, ФИФО — партия-партия шаффоф)</div>
+    ${batchRows.map(r=>row(
+      esc(r.fuelName)+' — '+(r.batchDate? r.batchDate+' партия' : 'жорий нарх')+' ('+fmt(r.costPerLiter)+' сўм/л)',
+      fmt(r.liters)+' л = '+fmt(r.cost)+" сўм", {indent:true}
+    )).join('') || row('—','0 сўм',{indent:true})}
     ${row('= Таннарх жами', fmt(pl.cogs)+" сўм", {bold:true})}
+    <p class="hint" style="margin:2px 0 0">Агар бир ойда бир неча қатор чиқса — демак шу ойда ЭСКИ ва ЯНГИ партия аралаш сотилган (эски қолдиқ тугаб, янгисига ўтилган). Бу "ўртача" рақам эмас, ҳар бир литр қайси партиядан экани аниқ кузатилади.</p>
     <div class="pl-group-title">Харажатлар</div>
     ${row('Электр энергияси (ойлик, жами)', fmt(pl.electricity)+" сўм", {indent:true})}
     ${row('Иш ҳақи (Бензин ходимлари)', fmt(pl.salary)+" сўм", {indent:true})}
@@ -1822,7 +1862,7 @@ function renderBenzinPL(){
     <div class="pl-group-title">Солиқлар</div>
     ${row('Акциз солиғи', fmt(pl.excise)+" сўм", {indent:true})}
     ${row('НДС — чиқим ('+pct(pl.tax.nds_rate)+', сотувдан)', fmt(pl.outputVat)+" сўм", {indent:true})}
-    ${row('НДС — кирим (ёқилғи+электр харидидан)', '− '+fmt(pl.inputVat)+" сўм", {indent:true})}
+    ${row('НДС — кирим (шу ОЙДА харид қилинган ёқилғи + электр)', '− '+fmt(pl.inputVat)+" сўм", {indent:true})}
     ${row('= НДС (тўланадиган, нетто)', fmt(pl.ndsNet)+" сўм", {indent:true})}
     ${row('Ижтимоий солиқ ('+pct(pl.tax.social_tax_rate)+', иш ҳақидан)', fmt(pl.socialAmount)+" сўм", {indent:true})}
     <div class="pl-group-title">Натижа</div>
@@ -2742,10 +2782,10 @@ function exportMonthlyPLExcel(monthStr){
     { label: `${monthStr} — Бензин, ${bPL.count} кунлик ҳисобот асосида` },
     { label: 'ДАРОМАД' },
     { label: 'Сотув суммаси (жами)', value: bPL.revenue },
-    { label: 'ТАННАРХ (ёқилғи тури бўйича, ФИФО)' },
+    { label: 'ТАННАРХ (партия-партия, ФИФО — эски/янги аралаш бўлса ҳам ҳар бири алоҳида кўринади)' },
   ];
-  (bPL.byFuelRows||[]).forEach(r=>{
-    benzinLines.push({ label: r.name+' — '+fmt(r.liters)+' л × '+fmt(r.costPrice)+' сўм', value: r.liters*r.costPrice });
+  benzinMonthlyBatchBreakdown(monthStr).forEach(r=>{
+    benzinLines.push({ label: r.fuelName+' — '+(r.batchDate? r.batchDate+' партия':'жорий нарх')+' ('+fmt(r.costPerLiter)+' сўм/л) — '+fmt(r.liters)+' л', value: r.cost });
   });
   benzinLines.push(
     { label: '= Таннарх жами', value: bPL.cogs },
@@ -2757,7 +2797,7 @@ function exportMonthlyPLExcel(monthStr){
     { label: 'СОЛИҚЛАР' },
     { label: 'Акциз солиғи', value: bPL.excise },
     { label: 'НДС — чиқим ('+pct(bPL.tax.nds_rate)+', сотувдан)', value: bPL.outputVat },
-    { label: 'НДС — кирим (ёқилғи+электр харидидан)', value: -bPL.inputVat },
+    { label: 'НДС — кирим (шу ойда харид қилинган ёқилғи + электр)', value: -bPL.inputVat },
     { label: '= НДС (тўланадиган, нетто)', value: bPL.ndsNet },
     { label: 'Ижтимоий солиқ ('+pct(bPL.tax.social_tax_rate)+', иш ҳақидан)', value: bPL.socialAmount },
     { label: 'НАТИЖА' },
