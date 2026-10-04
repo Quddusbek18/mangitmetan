@@ -1102,9 +1102,18 @@ function renderDavlat(){
 // ============================================================
 const GAP_START_DATE = '2026-10-01';
 function gapDailyRows(){
+  // Давлат ҳисоботида Агрес кўрсаткичи YЙЎҲ эмас, балки йўқотиш коэффициентига
+  // кўпайтирилган ҳолда (stateSoldM3 = agres * lossCoef) соликка тортилади —
+  // шу сабабли фарқ ҳам шу "давлат тан олган" рақамга нисбатан ҳисобланади,
+  // хом Агреснинг ўзига нисбатан эмас.
   return state.entries
     .filter(e=>e.date && e.date >= GAP_START_DATE)
-    .map(e=>({ date: e.date, amount: (Number(e.sold_m3||0)-Number(e.agres||0)) * Number(e.price||0), operator: e.operator_name }))
+    .map(e=>{
+      const lossCoef = priceFor(e.date).loss_coefficient || 0.986;
+      const stateSoldM3 = Number(e.agres||0) * lossCoef;
+      const amount = (Number(e.sold_m3||0) - stateSoldM3) * Number(e.price||0);
+      return { date: e.date, amount, operator: e.operator_name };
+    })
     .sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:0));
 }
 function gapWithdrawalRows(){
