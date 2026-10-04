@@ -119,7 +119,7 @@ const PUMP_NAMES = ['K1','K2','K3','K4','K5','K6'];
 let state = {
   session: null, profile: null,
   companies: [], prices: [], taxRates: [], fixedCosts: [], prepayments: [], otherExpenses: [],
-  entries: [], deliveries: [], payments: [], gapLedger: []
+  entries: [], deliveries: [], payments: [], gapLedger: [], entryEditLog: []
 };
 let pending = { deliveries: [] };
 let benzinPending = { sales: [] };
@@ -178,7 +178,7 @@ async function boot(){
 
   sb.auth.onAuthStateChange((event, session)=>{
     if(event === 'SIGNED_OUT'){ localStorage.removeItem('mm_login_at'); state = {session:null, profile:null, companies:[],prices:[],taxRates:[],fixedCosts:[],prepayments:[],otherExpenses:[],entries:[],deliveries:[],payments:[],
-      fuelTypes:[],fuelPrices:[],dispensers:[],benzinEntries:[],benzinCompanySales:[],benzinDeliveries:[],employees:[],employeeSalaries:[],gapLedger:[]}; renderLogin(); }
+      fuelTypes:[],fuelPrices:[],dispensers:[],benzinEntries:[],benzinCompanySales:[],benzinDeliveries:[],employees:[],employeeSalaries:[],gapLedger:[],entryEditLog:[]}; renderLogin(); }
   });
 
   // Очиқ турган саҳифада ҳам 5 соат тўлганда автоматик чиқариб юбориш
@@ -248,7 +248,7 @@ async function afterLogin(session){
 async function loadAll(){
   const [companies, prices, taxRates, fixedCosts, prepayments, otherExpenses, entries, deliveries, payments,
     fuelTypes, fuelPrices, dispensers, benzinEntries, benzinCompanySales, benzinDeliveries,
-    employees, employeeSalaries, gapLedger] = await Promise.all([
+    employees, employeeSalaries, gapLedger, entryEditLog] = await Promise.all([
     sb.from('companies').select('*').order('name'),
     sb.from('prices').select('*').order('effective_date'),
     sb.from('tax_rates').select('*').order('effective_date'),
@@ -267,6 +267,7 @@ async function loadAll(){
     sb.from('employees').select('*').order('full_name'),
     sb.from('employee_salaries').select('*').order('effective_date'),
     sb.from('gap_ledger').select('*').order('date', {ascending:false}),
+    sb.from('entry_edit_log').select('*').order('edited_at', {ascending:false}),
   ]);
   state.companies = companies.data || [];
   state.prices = prices.data || [];
@@ -286,6 +287,7 @@ async function loadAll(){
   state.employees = employees.data || [];
   state.employeeSalaries = employeeSalaries.data || [];
   state.gapLedger = gapLedger.data || [];
+  state.entryEditLog = entryEditLog.data || [];
 }
 
 function priceFor(dateStr){
@@ -402,6 +404,7 @@ function renderStationPicker(){
 function chooseStation(id){ currentStation = id; activeTab = null; renderShell(); }
 function switchStation(){ currentStation = null; activeTab = null; renderShell(); }
 function roleLabel(r){ return r==='ceo'?'CEO':(r==='direktor'?'Директор':'Оператор'); }
+function canEditEntries(){ return state.profile && state.profile.role==='ceo' && state.profile.can_edit_entries===true; }
 function switchTab(id){ activeTab = id; renderShell(); }
 
 function renderTab(){
@@ -995,8 +998,10 @@ function renderReportDetail(){
   const pays = state.payments.filter(p=>p.entry_id===e.id);
   const compName = id => (state.companies.find(c=>c.id===id)||{}).name || '—';
   const canEdit = state.profile.role === 'ceo';
+  const canEditFields = canEditEntries();
+  const edits = (state.entryEditLog||[]).filter(x=>x.entry_id===e.id);
   box.innerHTML = `<div class="detail-box">
-    <div><b>${e.date}</b> — Оператор: ${esc(e.operator_name)}</div>
+    <div><b>${e.date}</b> — Оператор: ${esc(e.operator_name)} ${edits.length?`<span class="pill">✎ ${edits.length} марта тузатилган</span>`:''}</div>
     <div>Помпалар: ${(e.pump_end||[]).map((v,i)=>PUMP_NAMES[i]+': '+fmt(v)).join(' · ')}</div>
     <div>Агрес: ${fmt(e.agres)} m3 &nbsp; | &nbsp; Сотилган: ${fmt(e.sold_m3)} m3 &nbsp; | &nbsp; Фарқ: ${fmt(e.sold_m3-e.agres)} m3</div>
     <div>Сотув суммаси: ${fmt(e.sales_value)} сўм (нарх: ${fmt(e.price)}/m3)</div>
@@ -1004,8 +1009,62 @@ function renderReportDetail(){
     ${dels.length? '<div>Берилган газ: '+dels.map(d=>compName(d.company_id)+' — '+fmt(d.m3)+' m3').join(', ')+'</div>':''}
     ${pays.length? '<div>Келган тўлов: '+pays.map(p=>compName(p.company_id)+' — '+fmt(p.amount)+" сўм").join(', ')+'</div>':''}
     ${e.izoh? '<div>Изоҳ: '+esc(e.izoh)+'</div>':''}
-    ${canEdit? `<button class="btn danger small" style="margin-top:8px" onclick="deleteEntry('${e.id}')">Бу ҳисоботни ўчириш</button>`:''}
+    <div style="margin-top:8px">
+      ${canEditFields? `<button class="btn small" onclick="startEditEntry('${e.id}')">Таҳрирлаш</button>`:''}
+      ${canEdit? `<button class="btn danger small" onclick="deleteEntry('${e.id}')">Бу ҳисоботни ўчириш</button>`:''}
+    </div>
+    <div id="entryEditArea"></div>
+    ${edits.length? `<div style="margin-top:10px"><b>Тузатишлар тарихи:</b>
+      <table style="margin-top:4px"><thead><tr><th>Вақт</th><th>Ким</th><th>Майдон</th><th>Эски</th><th>Янги</th></tr></thead>
+      <tbody>${edits.slice().sort((a,b)=>new Date(b.edited_at)-new Date(a.edited_at)).map(x=>`<tr><td>${new Date(x.edited_at).toLocaleString('uz-UZ')}</td><td>${esc(x.edited_by_name||'—')}</td><td>${esc(x.field_name)}</td><td>${esc(x.old_value)}</td><td>${esc(x.new_value)}</td></tr>`).join('')}</tbody></table>
+    </div>`:''}
   </div>`;
+}
+const ENTRY_EDIT_FIELDS = [
+  ['agres','Агрес (m3)'], ['sold_m3','Сотилган (m3)'], ['sales_value','Сотув суммаси (сўм)'],
+  ['uzcard','UZCARD'], ['humo','HUMO'], ['qr','QR'], ['naqt','Нақт'], ['izoh','Изоҳ']
+];
+function startEditEntry(id){
+  const e = state.entries.find(x=>x.id===id);
+  if(!e) return;
+  const area = document.getElementById('entryEditArea');
+  area.innerHTML = `<div class="card" style="margin-top:8px;background:#fffbe6">
+    <h3>Тузатиш — ${e.date}</h3>
+    ${ENTRY_EDIT_FIELDS.map(([key,label])=>`<div class="field"><label>${label}</label><input id="ee_${key}" type="${key==='izoh'?'text':'number'}" value="${esc(e[key]==null?'':e[key])}"></div>`).join('')}
+    <div style="margin-top:8px">
+      <button class="btn small" onclick="saveEntryEdit('${e.id}')">Сақлаш</button>
+      <button class="btn small secondary" onclick="document.getElementById('entryEditArea').innerHTML=''">Бекор қилиш</button>
+    </div>
+  </div>`;
+}
+async function saveEntryEdit(id){
+  const e = state.entries.find(x=>x.id===id);
+  if(!e) return;
+  const updates = {};
+  const logRows = [];
+  ENTRY_EDIT_FIELDS.forEach(([key])=>{
+    const el = document.getElementById('ee_'+key);
+    if(!el) return;
+    let newVal = key==='izoh' ? el.value.trim() : parseFloat(el.value);
+    if(key==='izoh' && newVal==='') newVal = null;
+    const oldVal = e[key];
+    const changed = key==='izoh' ? (String(oldVal||'') !== String(newVal||'')) : (Number(oldVal||0) !== Number(newVal||0));
+    if(changed){
+      updates[key] = newVal;
+      logRows.push({ station:'metan', entry_id:id, entry_date:e.date, field_name:key, old_value: oldVal==null?'':String(oldVal), new_value: newVal==null?'':String(newVal), edited_by_name: state.profile.full_name });
+    }
+  });
+  if(!Object.keys(updates).length){ toast("Ҳеч нарса ўзгармади"); document.getElementById('entryEditArea').innerHTML=''; return; }
+  const { error } = await sb.from('entries').update(updates).eq('id', id);
+  if(error){ toast("Хатолик: "+error.message); return; }
+  if(logRows.length){
+    await sb.from('entry_edit_log').insert(logRows);
+  }
+  toast("Тузатилди ✓");
+  await loadAll();
+  renderTab();
+  document.getElementById('rep_date').value = e.date;
+  renderReportDetail();
 }
 async function deleteEntry(id){
   if(!confirm("Бу кунлик ҳисоботни бутунлай ўчирасизми? (унга боғлиқ етказиб бериш/тўловлар ҳам ўчади)")) return;
