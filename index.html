@@ -119,7 +119,7 @@ const PUMP_NAMES = ['K1','K2','K3','K4','K5','K6'];
 let state = {
   session: null, profile: null,
   companies: [], prices: [], taxRates: [], fixedCosts: [], prepayments: [], otherExpenses: [],
-  entries: [], deliveries: [], payments: []
+  entries: [], deliveries: [], payments: [], gapLedger: []
 };
 let pending = { deliveries: [] };
 let benzinPending = { sales: [] };
@@ -156,22 +156,55 @@ const esc = s => (s??'').toString().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&l
 // ============================================================
 // AUTH
 // ============================================================
+// Хавфсизлик учун: бир логин 5 соатдан кейин АВТОМАТИК чиқиб кетади —
+// акс ҳолда кейинги оператор ўтган кишининг эски логида қолиб кетиши
+// мумкин (умумий компьютер/телефонда).
+const SESSION_MAX_MS = 5 * 60 * 60 * 1000;
+function sessionExpired(){
+  const t = Number(localStorage.getItem('mm_login_at'))||0;
+  return t>0 && (Date.now()-t) > SESSION_MAX_MS;
+}
 async function boot(){
   const { data:{ session } } = await sb.auth.getSession();
-  if(session){ await afterLogin(session); } else { renderLogin(); }
+  if(session && sessionExpired()){
+    await sb.auth.signOut();
+    renderLogin();
+    document.getElementById('loginErr').textContent = '5 соатдан кейин автоматик чиқиб кетилди — қайта киринг';
+  } else if(session){
+    await afterLogin(session);
+  } else {
+    renderLogin();
+  }
 
   sb.auth.onAuthStateChange((event, session)=>{
-    if(event === 'SIGNED_OUT'){ state = {session:null, profile:null, companies:[],prices:[],taxRates:[],fixedCosts:[],prepayments:[],otherExpenses:[],entries:[],deliveries:[],payments:[],
-      fuelTypes:[],fuelPrices:[],dispensers:[],benzinEntries:[],benzinCompanySales:[],benzinDeliveries:[],employees:[],employeeSalaries:[]}; renderLogin(); }
+    if(event === 'SIGNED_OUT'){ localStorage.removeItem('mm_login_at'); state = {session:null, profile:null, companies:[],prices:[],taxRates:[],fixedCosts:[],prepayments:[],otherExpenses:[],entries:[],deliveries:[],payments:[],
+      fuelTypes:[],fuelPrices:[],dispensers:[],benzinEntries:[],benzinCompanySales:[],benzinDeliveries:[],employees:[],employeeSalaries:[],gapLedger:[]}; renderLogin(); }
   });
+
+  // Очиқ турган саҳифада ҳам 5 соат тўлганда автоматик чиқариб юбориш
+  // (саҳифани қайта юкламаса ҳам) — ҳар дақиқада текширади.
+  setInterval(()=>{
+    if(state.session && sessionExpired()){
+      sb.auth.signOut().then(()=>{ toast("5 соатдан кейин автоматик чиқиб кетилди"); });
+    }
+  }, 60*1000);
 }
 
+// Операторлар учун ҳақиқий email очиш шарт эмас — "логин" (username)
+// билан кирадилар. Ичкарида Supabase'нинг ўзи ҳамон email талаб қилади,
+// шунинг учун "username" ни кўринмас тарзда "username@mangitmetan.local"
+// қилиб юборамиз. Аккаунт очишда ҳам email ўрнига шу форматни ишлатинг.
+const LOGIN_DOMAIN = '@mangitmetan.local';
+function toLoginEmail(input){
+  input = input.trim();
+  return input.includes('@') ? input : (input.toLowerCase() + LOGIN_DOMAIN);
+}
 function renderLogin(){
   document.getElementById('app').innerHTML = `
     <div class="card login-card">
       <h1>Мангит Метан</h1>
       <p class="sub">Кунлик ҳисобот ва бошқарув тизими</p>
-      <div class="field" style="text-align:left"><label>Email</label><input type="email" id="loginEmail"></div>
+      <div class="field" style="text-align:left"><label>Логин</label><input type="text" id="loginEmail" autocapitalize="off" autocomplete="username"></div>
       <div class="field" style="text-align:left"><label>Парол</label><input type="password" id="loginPass"></div>
       <button class="btn" style="width:100%" id="loginBtn" onclick="doLogin()">Кириш</button>
       <p class="hint" id="loginErr" style="color:var(--bad)"></p>
@@ -180,13 +213,14 @@ function renderLogin(){
 }
 
 async function doLogin(){
-  const email = document.getElementById('loginEmail').value.trim();
+  const email = toLoginEmail(document.getElementById('loginEmail').value);
   const password = document.getElementById('loginPass').value;
   const btn = document.getElementById('loginBtn');
   btn.disabled = true; btn.textContent = 'Текширилмоқда…';
   const { data, error } = await sb.auth.signInWithPassword({ email, password });
   btn.disabled = false; btn.textContent = 'Кириш';
-  if(error){ document.getElementById('loginErr').textContent = 'Email ёки парол хато'; return; }
+  if(error){ document.getElementById('loginErr').textContent = 'Логин ёки парол хато'; return; }
+  localStorage.setItem('mm_login_at', String(Date.now()));
   await afterLogin(data.session);
 }
 
@@ -214,7 +248,7 @@ async function afterLogin(session){
 async function loadAll(){
   const [companies, prices, taxRates, fixedCosts, prepayments, otherExpenses, entries, deliveries, payments,
     fuelTypes, fuelPrices, dispensers, benzinEntries, benzinCompanySales, benzinDeliveries,
-    employees, employeeSalaries] = await Promise.all([
+    employees, employeeSalaries, gapLedger] = await Promise.all([
     sb.from('companies').select('*').order('name'),
     sb.from('prices').select('*').order('effective_date'),
     sb.from('tax_rates').select('*').order('effective_date'),
@@ -232,6 +266,7 @@ async function loadAll(){
     sb.from('benzin_deliveries').select('*').order('date', {ascending:false}),
     sb.from('employees').select('*').order('full_name'),
     sb.from('employee_salaries').select('*').order('effective_date'),
+    sb.from('gap_ledger').select('*').order('date', {ascending:false}),
   ]);
   state.companies = companies.data || [];
   state.prices = prices.data || [];
@@ -250,6 +285,7 @@ async function loadAll(){
   state.benzinDeliveries = benzinDeliveries.data || [];
   state.employees = employees.data || [];
   state.employeeSalaries = employeeSalaries.data || [];
+  state.gapLedger = gapLedger.data || [];
 }
 
 function priceFor(dateStr){
@@ -307,9 +343,9 @@ function companyTotals(station){
 // станциянинг табларини кўради (currentStation орқали ажратилади).
 function tabsForRole(role, station){
   if(station === 'metan'){
-    if(role === 'operator') return [['entry','Кунлик ҳисобот']];
-    if(role === 'direktor') return [['overview','Умумий'],['reports','Ҳисоботлар'],['davlat','Давлат ҳисоботи'],['companies','Компаниялар'],['expenses','Харажатлар'],['salaries','Ойликлар']];
-    return [['entry','Кунлик ҳисобот'],['overview','Умумий'],['reports','Ҳисоботлар'],['davlat','Давлат ҳисоботи'],['companies','Компаниялар'],['expenses','Харажатлар'],['salaries','Ойликлар'],['settings','Созламалар']];
+    if(role === 'operator') return [['entry','Кунлик ҳисобот'],['reports','Ҳисоботлар'],['davlat','Давлат ҳисоботи'],['gap','Фарқ фонди']];
+    if(role === 'direktor') return [['overview','Умумий'],['reports','Ҳисоботлар'],['davlat','Давлат ҳисоботи'],['gap','Фарқ фонди'],['companies','Компаниялар'],['expenses','Харажатлар'],['salaries','Ойликлар']];
+    return [['entry','Кунлик ҳисобот'],['overview','Умумий'],['reports','Ҳисоботлар'],['davlat','Давлат ҳисоботи'],['gap','Фарқ фонди'],['companies','Компаниялар'],['expenses','Харажатлар'],['salaries','Ойликлар'],['settings','Созламалар']];
   }
   if(station === 'benzin'){
     if(role === 'operator') return [['bz_daily','Кунлик ишлар']];
@@ -375,6 +411,7 @@ function renderTab(){
   else if(activeTab==='overview') body.innerHTML = tplOverview();
   else if(activeTab==='reports') body.innerHTML = tplReports();
   else if(activeTab==='davlat') body.innerHTML = tplDavlat();
+  else if(activeTab==='gap') body.innerHTML = tplGapLedger(role);
   else if(activeTab==='companies') body.innerHTML = tplCompanies(role);
   else if(activeTab==='expenses') body.innerHTML = tplExpenses(role);
   else if(activeTab==='settings') body.innerHTML = tplSettings();
@@ -391,9 +428,11 @@ function afterRenderTab(){
   if(activeTab==='entry'){
     buildPumpFields(); buildCompanySelects(); renderPendingLists(); recalcPreview();
     document.getElementById('f_date').value = todayISO();
+    updateEntryDateWarning('metan');
   }
   if(activeTab==='bz_daily'){
     afterRenderBenzinDaily();
+    updateEntryDateWarning('benzin');
   }
   if(activeTab==='bz_reports'){
     afterRenderBenzinReports();
@@ -438,9 +477,10 @@ function tplEntry(){
   <div class="card">
     <div class="section-title"><h2>Бугунги ҳисобот</h2></div>
     <div class="row">
-      <div class="field"><label>Сана</label><input type="date" id="f_date"></div>
+      <div class="field"><label>Сана</label><input type="date" id="f_date" oninput="updateEntryDateWarning('metan')"></div>
       <div class="field"><label>Оператор</label><input type="text" id="f_operator" value="${esc(state.profile.full_name)}" disabled></div>
     </div>
+    <div id="f_dateWarn"></div>
     <p class="hint">Оператор исми сизнинг ҳисобингиздан автоматик олинади — ким киритганини аниқ билиш учун.</p>
   </div>
   <div class="card">
@@ -530,10 +570,39 @@ function renderPendingLists(){
 // Gathers + validates the current form. Returns null (and toasts the
 // problem) if something required is missing; otherwise returns everything
 // needed both to render the review screen and to actually submit.
+// Шу сана учун ҳисобот аллақачон бор-йўқлигини текшириш (дублика ёзувнинг
+// олдини олиш учун — базада ҳам "date unique" чекланиши бор, бу фақат
+// операторга ОЛДИНДАН, тушунарли хабар билан огоҳлантириш учун).
+function entryExistsForDate(date, station){
+  if(station==='benzin') return state.benzinEntries.some(e=>e.date===date);
+  return state.entries.some(e=>e.date===date);
+}
+// Сана майдони ўзгарганда — шу кунга ҳисобот борми, йўқми, операторга
+// ОЛДИНДАН (формани тўлдиришдан олдин) кўрсатиш учун.
+function updateEntryDateWarning(station){
+  const dateEl = document.getElementById(station==='benzin' ? 'bz_date' : 'f_date');
+  const warnEl = document.getElementById(station==='benzin' ? 'bz_dateWarn' : 'f_dateWarn');
+  if(!dateEl || !warnEl) return;
+  const date = dateEl.value;
+  if(date && entryExistsForDate(date, station)){
+    warnEl.innerHTML = `<div class="review-warn" style="margin-top:8px">⚠ ${date} санасига ҳисобот АЛЛАҚАЧОН киритилган. Бу санани қайта юбориб бўлмайди — тўғри санани танланг ёки CEO'га мурожаат қилинг.</div>`;
+  } else {
+    warnEl.innerHTML = '';
+  }
+}
+// Supabase'дан қайтган "duplicate key" хатосини операторга тушунарли
+// ўзбекча хабарга айлантиради.
+function friendlyDbError(error){
+  if(error && (error.code==='23505' || /duplicate key|already exists/i.test(error.message||''))){
+    return "Бу санага ҳисобот АЛЛАҚАЧОН киритилган — қайта юбориб бўлмайди. Агар хато бўлса, CEO'дан эски ёзувни тузатишни сўранг.";
+  }
+  return "Хатолик: " + ((error && error.message) || 'сақланмади');
+}
 function collectEntryForm(){
   const date = document.getElementById('f_date').value;
   const operator = document.getElementById('f_operator').value.trim();
   if(!date || !operator){ toast("Сана ва оператор исмини киритинг"); return null; }
+  if(entryExistsForDate(date, 'metan')){ toast("Бу санага ҳисобот аллақачон киритилган — бошқа сана танланг ёки CEO'га мурожаат қилинг"); return null; }
   const calc = recalcPreview();
   if(!calc.ok){ toast("Барча помпа кўрсаткичларини киритинг"); return null; }
   const agres = parseFloat(document.getElementById('f_agres').value);
@@ -656,8 +725,9 @@ async function doSubmitEntry(){
     await loadAll();
     renderTab();
   }catch(e){
-    toast("Хатолик: " + (e.message || 'сақланмади'));
+    toast(friendlyDbError(e));
     btn.disabled = false; btn.textContent = 'Тасдиқлаш ва юбориш';
+    await loadAll();
   }
 }
 
@@ -789,7 +859,29 @@ function tplOverview(){
   <div class="card group-income">
     <div class="section-title"><h2>Ойлик даромад ҳисоботи</h2><input type="month" id="pl_month" value="${currentMonthKey()}" style="width:auto"></div>
     <div id="plDetail"></div>
+  </div>
+
+  <div class="card">
+    <div class="section-title"><h2>Ойма-ой даромад (сўнгги 12 ой)</h2></div>
+    <div class="table-wrap"><table><thead><tr><th>Ой</th><th>Сотув суммаси</th><th>Соф фойда</th></tr></thead>
+      <tbody>${monthlyRevenueRows('metan').map(r=>`<tr><td>${r.month}</td><td>${fmt(r.revenue)}</td><td class="${r.netProfit<0?'bad-text':'good-text'}">${fmt(r.netProfit)}</td></tr>`).join('') || '<tr><td colspan="3" class="empty">Маълумот йўқ</td></tr>'}</tbody></table>
+    </div>
   </div>`;
+}
+// Станция учун сўнгги 12 ойнинг даромад/фойда рўйхати — "хоҳлаган ойда
+// қанча даромад қилганимизни" бир қарашда кўриш учун (чартдан ташқари,
+// аниқ рақамлар билан).
+function monthlyRevenueRows(station){
+  const src = station==='benzin' ? state.benzinEntries : state.entries;
+  const months = [...new Set(src.map(e=>e.date && e.date.slice(0,7)).filter(Boolean))].sort().slice(-12).reverse();
+  return months.map(m=>{
+    if(station==='benzin'){
+      const pl = computeBenzinMonthlyPL(m);
+      return { month: m, revenue: pl.revenue, netProfit: pl.netProfit };
+    }
+    const pl = computeMonthlyPL(m);
+    return { month: m, revenue: pl.revenue, netProfit: pl.netProfit };
+  });
 }
 
 // ============================================================
@@ -996,6 +1088,83 @@ function renderDavlat(){
     </tr></tfoot></table>
   </div>
   <p class="hint" style="margin-top:10px">Йўқотиш коэффициенти: ${computed[0] ? priceFor(computed[0].e.date).loss_coefficient : 0.986} (Созламалар → Нарх тарихидан олинади, кун бўйича ўзгариши мумкин).</p>`;
+}
+
+// ============================================================
+// ФАРҚ ФОНДИ — ҳисоблагич (Агрес) билан помпадан сотилган m3 орасидаги
+// кунлик фарқ (сўмда) йиғилиб борадиган ҳисоб. 2026-10-01дан бошланади
+// (ундан олдинги ойлар ҳисобга олинмайди — шундай сўралган).
+// Ҳар кун: фарқ = (сотилган m3 − Агрес) × нарх.
+//   Агар сотилган > Агрес → МУСБАТ (қўшилади, ортиқча нақд пайдо бўлган)
+//   Агар Агрес > сотилган → МАНФИЙ (айрилади, камомад)
+// Шунга қўшимча: оператор кунлик харажат ёзса ёки CEO ўзи ечиб олса —
+// gap_ledger'га ёзилади ва ШУ йиғиндидан АЙРИЛАДИ.
+// ============================================================
+const GAP_START_DATE = '2026-10-01';
+function gapDailyRows(){
+  return state.entries
+    .filter(e=>e.date && e.date >= GAP_START_DATE)
+    .map(e=>({ date: e.date, amount: (Number(e.sold_m3||0)-Number(e.agres||0)) * Number(e.price||0), operator: e.operator_name }))
+    .sort((a,b)=> a.date<b.date?-1:(a.date>b.date?1:0));
+}
+function gapWithdrawalRows(){
+  return state.gapLedger.filter(g=>g.date>=GAP_START_DATE);
+}
+// Жорий йиғинди (барча кунлик фарқлар − барча ечиб олинганлар).
+function gapBalance(){
+  const credit = gapDailyRows().reduce((s,r)=>s+r.amount, 0);
+  const debit = gapWithdrawalRows().reduce((s,r)=>s+Number(r.amount||0), 0);
+  return credit - debit;
+}
+function tplGapLedger(role){
+  const canWrite = role==='operator' || role==='ceo';
+  const canDelete = role==='ceo';
+  const balance = gapBalance();
+  // Иккала манбани (кунлик фарқ + ечиб олинганлар) бир хронологик
+  // рўйхатга бирлаштирамиз, энг янгиси тепада.
+  const rows = [
+    ...gapDailyRows().map(r=>({ date:r.date, label:`Кунлик фарқ (${esc(r.operator||'—')})`, amount:r.amount, kind:'credit' })),
+    ...gapWithdrawalRows().map(r=>({ date:r.date, label:(r.source==='ceo_withdrawal'?'CEO ечиб олди':'Оператор харажати')+(r.note?' — '+esc(r.note):'')+' — '+esc(r.created_by_name||''), amount:-Number(r.amount||0), kind:'debit', id:r.id }))
+  ].sort((a,b)=> a.date<b.date?1:(a.date>b.date?-1:0));
+  return `
+  <div class="card">
+    <div class="section-title"><h2>Фарқ фонди (ҳисоблагич ↔ помпа)</h2></div>
+    <p class="hint">Ҳар куни: помпадан сотилган m3 билан Агрес (ҳисоблагич) орасидаги фарқ сўмга айлантирилиб шу ерга йиғилади (2026-10-01дан бошлаб). Оператор кунлик харажат ёзганда ёки CEO ўзи ечиб олганда — шу йиғиндидан АЙРИЛАДИ. Бу расмий сотув/солиқ ҳисобига КИРМАЙДИ — фақат шу "фарқ" пулининг ўзини назорат қилиш учун.</p>
+    <div class="tile-row"><div class="tile"><div class="label">Жорий қолдиқ</div><div class="value ${balance<0?'bad':'good'}">${fmt(balance)} сўм</div></div></div>
+  </div>
+  ${canWrite ? `
+  <div class="card group-settings">
+    <h2>${role==='ceo'?'CEO — ечиб олиш / сарфлаш':'Харажат ёзиш'}</h2>
+    <div class="row">
+      <div class="field"><label>Сана</label><input type="date" id="gl_date" value="${todayISO()}"></div>
+      <div class="field"><label>Сумма (сўм)</label><input type="number" id="gl_amount" step="1"></div>
+      <div class="field" style="flex:2"><label>Изоҳ</label><input type="text" id="gl_note" placeholder="масалан: эҳтиёт қисм учун"></div>
+      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addGapWithdrawal('${role==='ceo'?'ceo_withdrawal':'operator_expense'}')">Ёзиш</button></div>
+    </div>
+  </div>` : ''}
+  <div class="card">
+    <h2>Тарих</h2>
+    <div class="table-wrap"><table><thead><tr><th>Сана</th><th>Тавсиф</th><th>Сумма</th>${canDelete?'<th></th>':''}</tr></thead>
+      <tbody>${rows.map(r=>`<tr><td>${r.date}</td><td>${r.label}</td><td class="${r.amount<0?'bad-text':'good-text'}">${r.amount<0?'':'+'}${fmt(r.amount)}</td>${canDelete?`<td>${r.kind==='debit'?`<button class="del" onclick="deleteGapWithdrawal('${r.id}')">✕</button>`:''}</td>`:''}</tr>`).join('') || `<tr><td colspan="${canDelete?4:3}" class="empty">Ҳали маълумот йўқ</td></tr>`}</tbody></table>
+    </div>
+  </div>`;
+}
+async function addGapWithdrawal(source){
+  const date = document.getElementById('gl_date').value;
+  const amount = parseFloat(document.getElementById('gl_amount').value);
+  const note = document.getElementById('gl_note').value.trim() || null;
+  if(!date || !amount){ toast("Сана ва суммани киритинг"); return; }
+  const { error } = await sb.from('gap_ledger').insert({
+    date, amount, source, note, created_by_name: state.profile.full_name
+  });
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Ёзилди ✓"); await loadAll(); renderTab();
+}
+async function deleteGapWithdrawal(id){
+  if(!confirm("Бу ёзувни ўчирасизми?")) return;
+  const { error } = await sb.from('gap_ledger').delete().eq('id', id);
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Ўчирилди ✓"); await loadAll(); renderTab();
 }
 
 // ============================================================
@@ -1613,9 +1782,10 @@ function tplBenzinDaily(role){
   <div class="card">
     <div class="section-title"><h2>Бензин — бугунги ҳисобот</h2></div>
     <div class="row">
-      <div class="field"><label>Сана</label><input type="date" id="bz_date" value="${todayISO()}"></div>
+      <div class="field"><label>Сана</label><input type="date" id="bz_date" value="${todayISO()}" oninput="updateEntryDateWarning('benzin')"></div>
       <div class="field"><label>Оператор</label><input type="text" value="${esc(state.profile.full_name)}" disabled></div>
     </div>
+    <div id="bz_dateWarn"></div>
   </div>
   <div class="card">
     <h2>Калонкалар — ҳозирги кўрсаткич (литр)</h2>
@@ -1691,6 +1861,13 @@ function tplBenzinReports(){
     <div id="bplDetail"></div>
   </div>
   <div class="card">
+    <div class="section-title"><h2>Ойма-ой даромад (сўнгги 12 ой)</h2></div>
+    <div id="bzChartMonthly" style="margin-bottom:10px"></div>
+    <div class="table-wrap"><table><thead><tr><th>Ой</th><th>Сотув суммаси</th><th>Соф фойда</th></tr></thead>
+      <tbody>${monthlyRevenueRows('benzin').map(r=>`<tr><td>${r.month}</td><td>${fmt(r.revenue)}</td><td class="${r.netProfit<0?'bad-text':'good-text'}">${fmt(r.netProfit)}</td></tr>`).join('') || '<tr><td colspan="3" class="empty">Маълумот йўқ</td></tr>'}</tbody></table>
+    </div>
+  </div>
+  <div class="card">
     <div class="section-title"><h2>Заҳира (бухгалтерия ҳисоби)</h2></div>
     <p class="hint">⚠ Бу ҳақиқий тankни ўлчайдиган асбобдан эмас — фақат "келган − сотилган" ҳисоби. Назорат учун фойдаланинг, лекин 100% аниқ деб қабул қилманг.</p>
     <div class="table-wrap"><table><thead><tr><th>Ёқилғи</th><th>Жами келган</th><th>Жами сотилган</th><th>Ҳисобий қолдиқ</th></tr></thead>
@@ -1746,8 +1923,16 @@ function tplBenzinSettings(){
       <button class="btn small" onclick="addTaxRate()">Янги ставка қўшиш</button>
     </div>
     <h3 style="margin-top:16px">Калонкалар — қайси марка бириктирилган</h3>
-    <div class="table-wrap"><table><thead><tr><th>Калонка</th><th>Ёқилғи тури</th></tr></thead>
-      <tbody>${state.dispensers.map(d=>`<tr><td>${esc(d.name)}</td><td><select onchange="setDispenserFuel('${d.id}', this.value)">${state.fuelTypes.map(f=>`<option value="${f.id}" ${f.id===d.fuel_type_id?'selected':''}>${esc(f.name)}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>
+    <p class="hint">Фақат "Фаол" калонкалар кунлик ҳисобот формасида кўринади. Ишламаётган калонкани "Фаол эмас" қилиб қўйсангиз, оператор формасида ҳар куни унга 0 киритиш шарт бўлмай қолади. Янги маҳсулот (масалан бошқа турдаги ёқилғи) сотила бошласа, пастдан янги калонка қўшинг.</p>
+    <div class="table-wrap"><table><thead><tr><th>Калонка</th><th>Ёқилғи тури</th><th>Ҳолат</th></tr></thead>
+      <tbody>${state.dispensers.map(d=>`<tr><td>${esc(d.name)}</td><td><select onchange="setDispenserFuel('${d.id}', this.value)">${state.fuelTypes.map(f=>`<option value="${f.id}" ${f.id===d.fuel_type_id?'selected':''}>${esc(f.name)}</option>`).join('')}</select></td><td><button class="btn secondary small" onclick="toggleDispenserActive('${d.id}', ${!d.active})">${d.active?'✓ Фаол (ўчириш)':'Фаол эмас (ёқиш)'}</button></td></tr>`).join('')}</tbody></table></div>
+    <div class="row" style="margin-top:10px">
+      <div class="field" style="flex:2"><label>Янги калонка номи</label><input type="text" id="disp_name" placeholder="масалан: 2-калонка / А"></div>
+      <div class="field"><label>Ёқилғи тури</label><select id="disp_fuel">${state.fuelTypes.map(f=>`<option value="${f.id}">${esc(f.name)}</option>`).join('')}</select></div>
+      <div class="field"><label>Бошланғич кўрсаткич (ихтиёрий)</label><input type="number" step="0.01" id="disp_seed" placeholder="агар калонкада ҳозир рақам бор бўлса"></div>
+      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addDispenser()">Қўшиш</button></div>
+    </div>
+    <p class="hint">⚠ Агар бу калонка аввалдан бор бўлиб, ҳозир рақами 0 ЭМАС бўлса, "Бошланғич кўрсаткич"ни МАЖБУРИЙ тўлдиринг — акс ҳолда биринчи кун "сотилган" ўрнига ҳозирги кўрсаткичнинг ЎЗИ (масалан 1,928,932) катта рақам сифатида ёзилиб кетади (метанда бўлган хатонинг айнан ўзи).</p>
     <h3 style="margin-top:16px">Зичлик (тонна→литр учун, ихтиёрий)</h3>
     <p class="hint">Агар ТТН'да фақат тонна кўрсатилса, қабул қилишда шу зичлик орқали литрга авто-ҳисобланади. Аниқ билмасангиз бўш қолдиринг — литрни қўлда киритаверасиз.</p>
     <div class="table-wrap"><table><thead><tr><th>Тур</th><th>Зичлик (кг/л)</th></tr></thead>
@@ -1776,6 +1961,8 @@ function afterRenderBenzinDaily(){
 function afterRenderBenzinReports(){
   const plMonth = document.getElementById('bpl_month');
   if(plMonth){ renderBenzinPL(); plMonth.addEventListener('change', renderBenzinPL); }
+  const chartBox = document.getElementById('bzChartMonthly');
+  if(chartBox) chartBox.innerHTML = svgBarChart(benzinMonthlySeries(), {unit:' сўм'});
 }
 
 // Ойлар кесимида бензин сотув суммаси — monthlySalesSeries()'нинг бензин
@@ -1802,18 +1989,16 @@ function benzinMonthlySeries(){
 // ҚЎШИЛМАЙДИ, алоҳида-алоҳида кўрсатилади.
 // ============================================================
 function tplDashboard(){
-  const monthStr = currentMonthKey();
-  const mPL = computeMonthlyPL(monthStr);
-  const bPL = computeBenzinMonthlyPL(monthStr);
   return `
   <div class="card">
-    <div class="section-title"><h2>Умумий ҳолат — ${monthStr}</h2></div>
-    <p class="hint">Иккала станциянинг (Метан ва Бензин) шу ойдаги молиявий ҳаракати. Метан — СОФ фойда (барча харажат ва солиқлардан кейин). Бензин — ҳозирча фақат ЯЛПИ фойда (умумий харажатлар — иш ҳақи, банк, ер солиғи — ҳали иккита станцияга бўлинмагани сабабли). Шунинг учун иккиси ҚЎШИЛМАЙДИ, алоҳида-алоҳида кўрсатилади.</p>
-    <div class="tile-row">
-      <div class="tile"><div class="label">Метан — сотув суммаси</div><div class="value">${fmt(mPL.revenue)} сўм</div></div>
-      <div class="tile"><div class="label">Метан — соф фойда</div><div class="value ${mPL.netProfit<0?'bad':'good'}">${fmt(mPL.netProfit)} сўм</div></div>
-      <div class="tile"><div class="label">Бензин — сотув суммаси</div><div class="value">${fmt(bPL.revenue)} сўм</div></div>
-      <div class="tile"><div class="label">Бензин — ялпи фойда</div><div class="value ${bPL.grossProfit<0?'bad':'good'}">${fmt(bPL.grossProfit)} сўм</div></div>
+    <div class="section-title"><h2>Умумий ҳолат</h2><input type="month" id="dash_month" value="${currentMonthKey()}" style="width:auto"></div>
+    <p class="hint">Иккала станциянинг (Метан ва Бензин) танланган ойдаги молиявий ҳаракати. Метан — СОФ фойда (барча харажат ва солиқлардан кейин). Бензин — ҳозирча фақат ЯЛПИ фойда (умумий харажатлар — иш ҳақи, банк, ер солиғи — ҳали иккита станцияга бўлинмагани сабабли). Шунинг учун иккиси ҚЎШИЛМАЙДИ, алоҳида-алоҳида кўрсатилади.</p>
+    <div class="tile-row" id="dashTiles"></div>
+  </div>
+  <div class="card">
+    <div class="section-title"><h2>Ойма-ой даромад (сўнгги 12 ой) — Метан ва Бензин</h2></div>
+    <div class="table-wrap"><table><thead><tr><th>Ой</th><th>Метан — сотув</th><th>Метан — соф фойда</th><th>Бензин — сотув</th><th>Бензин — соф фойда</th></tr></thead>
+      <tbody id="dashCompareRows"></tbody></table>
     </div>
   </div>
   <div class="card">
@@ -1825,11 +2010,38 @@ function tplDashboard(){
     <div id="dashChartBenzin"></div>
   </div>`;
 }
+function renderDashboardTiles(){
+  const monthStr = document.getElementById('dash_month').value || currentMonthKey();
+  const mPL = computeMonthlyPL(monthStr);
+  const bPL = computeBenzinMonthlyPL(monthStr);
+  const box = document.getElementById('dashTiles');
+  if(!box) return;
+  box.innerHTML = `
+    <div class="tile"><div class="label">Метан — сотув суммаси</div><div class="value">${fmt(mPL.revenue)} сўм</div></div>
+    <div class="tile"><div class="label">Метан — соф фойда</div><div class="value ${mPL.netProfit<0?'bad':'good'}">${fmt(mPL.netProfit)} сўм</div></div>
+    <div class="tile"><div class="label">Бензин — сотув суммаси</div><div class="value">${fmt(bPL.revenue)} сўм</div></div>
+    <div class="tile"><div class="label">Бензин — ялпи фойда</div><div class="value ${bPL.grossProfit<0?'bad':'good'}">${fmt(bPL.grossProfit)} сўм</div></div>`;
+}
 function afterRenderDashboard(){
   const m = document.getElementById('dashChartMetan');
   const b = document.getElementById('dashChartBenzin');
   if(m) m.innerHTML = svgBarChart(monthlySalesSeries(), {unit:' сўм'});
   if(b) b.innerHTML = svgBarChart(benzinMonthlySeries(), {unit:' сўм'});
+  renderDashboardTiles();
+  const dm = document.getElementById('dash_month');
+  if(dm) dm.addEventListener('change', renderDashboardTiles);
+  const metanRows = monthlyRevenueRows('metan');
+  const benzinByMonth = {};
+  monthlyRevenueRows('benzin').forEach(r=>{ benzinByMonth[r.month] = r; });
+  const months = [...new Set([...metanRows.map(r=>r.month), ...Object.keys(benzinByMonth)])].sort().reverse().slice(0,12);
+  const rowsBox = document.getElementById('dashCompareRows');
+  if(rowsBox){
+    const metanByMonth = {}; metanRows.forEach(r=>{ metanByMonth[r.month]=r; });
+    rowsBox.innerHTML = months.map(m=>{
+      const mr = metanByMonth[m]; const br = benzinByMonth[m];
+      return `<tr><td>${m}</td><td>${mr?fmt(mr.revenue):'—'}</td><td class="${mr&&mr.netProfit<0?'bad-text':'good-text'}">${mr?fmt(mr.netProfit):'—'}</td><td>${br?fmt(br.revenue):'—'}</td><td class="${br&&br.netProfit<0?'bad-text':'good-text'}">${br?fmt(br.netProfit):'—'}</td></tr>`;
+    }).join('') || '<tr><td colspan="5" class="empty">Маълумот йўқ</td></tr>';
+  }
 }
 
 function recalcBenzinPreview(){
@@ -1888,6 +2100,7 @@ function renderBenzinSalesList(){
 function collectBenzinForm(){
   const date = document.getElementById('bz_date').value;
   if(!date){ toast("Санани киритинг"); return null; }
+  if(entryExistsForDate(date, 'benzin')){ toast("Бу санага ҳисобот аллақачон киритилган — бошқа сана танланг ёки CEO'га мурожаат қилинг"); return null; }
   const readings = {};
   let ok = true;
   state.dispensers.filter(d=>d.active).forEach(d=>{
@@ -1994,7 +2207,7 @@ async function doSubmitBenzinEntry(){
     kechagi_note: f.kechagiVal ? parseFloat(f.kechagiVal) : null,
     izoh: f.izoh
   }).select().single();
-  if(error){ toast("Хатолик: "+error.message); btn.disabled=false; btn.textContent='Тасдиқлаш ва юбориш'; return; }
+  if(error){ toast(friendlyDbError(error)); btn.disabled=false; btn.textContent='Тасдиқлаш ва юбориш'; await loadAll(); return; }
 
   if(benzinPending.sales.length){
     const rows = benzinPending.sales.map(s=>({ entry_id: entryRow.id, company_id: s.company_id, fuel_type_id: s.fuel_type_id, liters: s.liters, price: s.price, sum: s.sum }));
@@ -2104,6 +2317,52 @@ async function setDispenserFuel(dispenserId, fuelId){
   const { error } = await sb.from('dispensers').update({ fuel_type_id: fuelId }).eq('id', dispenserId);
   if(error){ toast("Хатолик: "+error.message); return; }
   toast("Янгиланди ✓"); await loadAll(); renderTab();
+}
+// Калонкани ёқиш/ўчириш — фақат "фаол" калонкалар кунлик ҳисобот
+// формасида кўринади (tplBenzinDaily: state.dispensers.filter(d=>d.active)).
+async function toggleDispenserActive(dispenserId, makeActive){
+  const { error } = await sb.from('dispensers').update({ active: makeActive }).eq('id', dispenserId);
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast(makeActive ? "Калонка ёқилди ✓ — энди кунлик ҳисоботда кўринади" : "Калонка ўчирилди ✓ — энди кунлик ҳисоботда кўринмайди"); await loadAll(); renderTab();
+}
+// Янги калонка қўшиш — масалан янги маҳсулот (бошқа ёқилғи тури) сотила
+// бошласа, CEO ўзи шу ердан қўшади. Бошланғич кўрсаткич 0дан бошланади —
+// агар калонка ҳақиқатда аввалдан бор бўлса, биринчи кунги кўрсаткични
+// жорий ҳолатга қараб операторга тўғридан-тўғри киритиш тавсия этилади.
+async function addDispenser(){
+  const name = document.getElementById('disp_name').value.trim();
+  const fuelId = document.getElementById('disp_fuel').value;
+  const seedStr = document.getElementById('disp_seed').value;
+  const seed = seedStr!=='' ? parseFloat(seedStr) : null;
+  if(!name){ toast("Калонка номини киритинг"); return; }
+  const maxSort = state.dispensers.reduce((m,d)=>Math.max(m, Number(d.sort_order)||0), 0);
+  const { data: newDisp, error } = await sb.from('dispensers').insert({
+    name, fuel_type_id: fuelId, active: true, sort_order: maxSort+1
+  }).select().single();
+  if(error){ toast("Хатолик: "+error.message); return; }
+
+  // Агар бошланғич кўрсаткич берилган бўлса — КЕЧАГИ сана учун шу
+  // қийматни "ўтган кунги кўрсаткич" сифатида ёзиб қўямиз (метандаги
+  // seed-хатосининг олдини олиш учун), шунда операторнинг БУГУНГИ биринчи
+  // ёзуви тўғри фарқ (сотилган) чиқаради, бутун кўрсаткичнинг ўзи эмас.
+  if(seed !== null && !isNaN(seed)){
+    const y = new Date(); y.setDate(y.getDate()-1);
+    const yesterday = y.toISOString().slice(0,10);
+    const existing = state.benzinEntries.find(e=>e.date===yesterday);
+    if(existing){
+      const readings = Object.assign({}, existing.readings||{}, { [newDisp.id]: seed });
+      const { error: e2 } = await sb.from('benzin_entries').update({ readings }).eq('id', existing.id);
+      if(e2){ toast("Калонка қўшилди, лекин бошланғич кўрсаткични ёзишда хатолик: "+e2.message); await loadAll(); renderTab(); return; }
+    } else {
+      const { error: e2 } = await sb.from('benzin_entries').insert({
+        date: yesterday, operator_name: state.profile.full_name,
+        readings: { [newDisp.id]: seed }, naqd: 0, uzkard: 0, xumo: 0,
+        izoh: 'Калонка бошланғич кўрсаткичи (тизимга қўшилган кундан олдинги кун)'
+      });
+      if(e2){ toast("Калонка қўшилди, лекин бошланғич кўрсаткични ёзишда хатолик: "+e2.message); await loadAll(); renderTab(); return; }
+    }
+  }
+  toast("Калонка қўшилди ✓"); document.getElementById('disp_name').value=''; await loadAll(); renderTab();
 }
 
 // ============================================================
