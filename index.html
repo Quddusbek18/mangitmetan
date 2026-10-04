@@ -2059,8 +2059,11 @@ function benzinMonthlySeries(){
 function tplDashboard(){
   return `
   <div class="card">
-    <div class="section-title"><h2>Умумий ҳолат</h2><input type="month" id="dash_month" value="${currentMonthKey()}" style="width:auto"></div>
-    <p class="hint">Иккала станциянинг (Метан ва Бензин) танланган ойдаги молиявий ҳаракати. Метан — СОФ фойда (барча харажат ва солиқлардан кейин). Бензин — ҳозирча фақат ЯЛПИ фойда (умумий харажатлар — иш ҳақи, банк, ер солиғи — ҳали иккита станцияга бўлинмагани сабабли). Шунинг учун иккиси ҚЎШИЛМАЙДИ, алоҳида-алоҳида кўрсатилади.</p>
+    <div class="section-title"><h2>Умумий ҳолат</h2>
+      <input type="month" id="dash_month" value="${currentMonthKey()}" style="width:auto">
+      <button class="btn small" onclick="exportMonthlyPLExcel(document.getElementById('dash_month').value)">📊 Ойлик ҳисобот — Excel</button>
+    </div>
+    <p class="hint">Иккала станциянинг (Метан ва Бензин) танланган ойдаги молиявий ҳаракати. Метан — СОФ фойда (барча харажат ва солиқлардан кейин). Бензин — ҳозирча фақат ЯЛПИ фойда (умумий харажатлар — иш ҳақи, банк, ер солиғи — ҳали иккита станцияга бўлинмагани сабабли). Шунинг учун иккиси ҚЎШИЛМАЙДИ, алоҳида-алоҳида кўрсатилади. Юқоридаги тугма орқали шу ойнинг тўлиқ ҳисоб-китоби (бухгалтер учун, қадам-бақадам) Excel файл сифатида юкланади.</p>
     <div class="tile-row" id="dashTiles"></div>
   </div>
   <div class="card">
@@ -2536,6 +2539,16 @@ async function addEmployeeSalary(station){
 // ============================================================
 // Метан — Excel захира нусхаси. Фақат метан станциясига тегишли маълумот
 // (бензинники алоҳида функцияда — иккиси ҳеч қачон бир файлга аралашмайди).
+// Жами қатор қўшиш — рақамли устунлар йиғиндиси, "ЖАМИ" ёрлиғи биринчи
+// матн устунига қўйилади. Умуман бўш рўйхатда ҳеч нарса қайтармайди.
+function withTotalRow(rows, labelField, numericFields){
+  if(!rows || !rows.length) return rows;
+  const total = {};
+  Object.keys(rows[0]).forEach(k=>{ total[k] = ''; });
+  total[labelField] = 'ЖАМИ';
+  numericFields.forEach(k=>{ total[k] = rows.reduce((s,r)=>s+(Number(r[k])||0),0); });
+  return [...rows, total];
+}
 function exportMetanExcel(){
   if(typeof XLSX === 'undefined'){ toast("Excel кутубхонаси юкланмади — интернетни текшириб, саҳифани қайта юкланг"); return; }
   const wb = XLSX.utils.book_new();
@@ -2545,32 +2558,55 @@ function exportMetanExcel(){
     XLSX.utils.book_append_sheet(wb, ws, name.slice(0,31));
   };
 
-  addSheet('Kunlik hisobot', state.entries.map(e=>({
-    Sana:e.date, Operator:e.operator_name, SotilganM3:e.sold_m3, Agres:e.agres, SotuvSummasi:e.sales_value,
-    Naqt:e.naqt, Uzcard:e.uzcard, Humo:e.humo, QR:e.qr, Narx:e.price, Izoh:e.izoh
-  })));
+  addSheet('Kunlik hisobot', withTotalRow(state.entries.map(e=>{
+    const companyM3 = state.deliveries.filter(d=>d.entry_id===e.id).reduce((s,d)=>s+(Number(d.m3)||0),0);
+    const row = { 'Сана':e.date, 'Оператор':e.operator_name };
+    (e.pump_end||[]).forEach((v,i)=>{ row['Калонка '+(PUMP_NAMES[i]||('K'+(i+1)))+' кўрсаткичи'] = v; });
+    row['Кунлик сотув (m3)'] = e.sold_m3;
+    row['Кунлик сотув суммаси (сўм)'] = e.sales_value;
+    row['Нақт (сўм)'] = e.naqt;
+    row['UZCARD (сўм)'] = e.uzcard;
+    row['HUMO (сўм)'] = e.humo;
+    row['QR (сўм)'] = e.qr;
+    row['Компанияларга сотилган (m3)'] = companyM3;
+    row['Агрес — ҳисоблагичдан ўтган (m3)'] = e.agres;
+    return row;
+  }), 'Оператор', ['Кунлик сотув (m3)','Кунлик сотув суммаси (сўм)','Нақт (сўм)','UZCARD (сўм)','HUMO (сўм)','QR (сўм)','Компанияларга сотилган (m3)','Агрес — ҳисоблагичдан ўтган (m3)']));
+
   addSheet('Kompaniyaga gaz', state.deliveries.map(d=>({
-    Sana:(d.entries&&d.entries.date)||'', Kompaniya:(state.companies.find(c=>c.id===d.company_id)||{}).name||'', M3:d.m3
+    'Сана':(d.entries&&d.entries.date)||'', 'Компания':(state.companies.find(c=>c.id===d.company_id)||{}).name||'', 'Берилган газ (m3)':d.m3
   })));
   addSheet('Kompaniya tolovlari', state.payments.map(p=>({
-    Sana:p.date, Kompaniya:(state.companies.find(c=>c.id===p.company_id)||{}).name||'', Summa:p.amount, Izoh:p.note, KimKiritgan:p.created_by_name
+    'Сана':p.date, 'Компания':(state.companies.find(c=>c.id===p.company_id)||{}).name||'', 'Сумма (сўм)':p.amount, 'Изоҳ':p.note, 'Ким киритган':p.created_by_name
   })));
-  addSheet('Kompaniyalar (balans)', companyTotals('metan').map(c=>({ Nomi:c.name, SotilganM3:c.m3, SotilganSumma:c.sold, Tolangan:c.paid, Balans:c.paid-c.sold })));
+  addSheet('Kompaniyalar (balans)', companyTotals('metan').map(c=>({ 'Номи':c.name, 'Сотилган (m3)':c.m3, 'Сотилган сумма (сўм)':c.sold, 'Тўланган (сўм)':c.paid, 'Баланс (сўм)':c.paid-c.sold })));
   const metanEmployees = employeesForStation('metan');
-  addSheet('Xodimlar', metanEmployees.map(e=>({ Ism:e.full_name, Lavozim:e.position, Faol:e.active?'Ha':"Yo'q" })));
+  addSheet('Xodimlar', metanEmployees.map(e=>({ 'Исм':e.full_name, 'Лавозим':e.position, 'Фаол':e.active?'Ҳа':"Йўқ" })));
   addSheet('Oyliklar tarixi', state.employeeSalaries.filter(s=>metanEmployees.some(e=>e.id===s.employee_id)).map(s=>({
-    Xodim:(state.employees.find(e=>e.id===s.employee_id)||{}).full_name||'', SanaDan:s.effective_date, Summa:s.amount
+    'Ходим':(state.employees.find(e=>e.id===s.employee_id)||{}).full_name||'', 'Сана (-дан)':s.effective_date, 'Сумма (сўм)':s.amount
   })));
-  addSheet('Narxlar', state.prices);
-  addSheet('Soliq stavkalari', state.taxRates);
-  addSheet('Doimiy xarajatlar', state.fixedCosts.filter(f=>(f.station||'metan')==='metan'));
-  addSheet('Boshqa xarajatlar', state.otherExpenses.filter(e=>(e.station||'metan')==='metan'));
+  addSheet('Narxlar', state.prices.map(p=>({
+    'Сана (-дан)':p.effective_date, 'Сотув нархи (сўм/m3)':p.sale_price, 'Таннарх (сўм/m3)':p.cost_price,
+    'Акциз (сўм/m3)':p.excise, "Йўқотиш коэффициенти":p.loss_coefficient, 'Ким киритган':p.created_by_name
+  })));
+  addSheet('Soliq stavkalari', state.taxRates.map(t=>({
+    'Сана (-дан)':t.effective_date, 'НДС (%)':(Number(t.nds_rate)||0)*100, 'Ижтимоий солиқ (%)':(Number(t.social_tax_rate)||0)*100,
+    'Фойда солиғи (%)':(Number(t.profit_tax_rate)||0)*100, 'Ким киритган':t.created_by_name
+  })));
+  addSheet('Doimiy xarajatlar', state.fixedCosts.filter(f=>(f.station||'metan')==='metan').map(f=>({
+    'Сана (-дан)':f.effective_date, 'Ойлик фонд (сўм)':f.salary, 'Банк кредит фоизи (сўм)':f.bank_loan_interest,
+    'Ер/мулк солиғи (сўм)':f.land_property_tax, 'Электр тарифи (сўм)':f.electricity_tariff, 'Ким киритган':f.created_by_name
+  })));
+  addSheet('Boshqa xarajatlar', withTotalRow(state.otherExpenses.filter(e=>(e.station||'metan')==='metan').map(e=>({
+    'Сана':e.date, 'Тавсиф':e.description, 'Сумма (сўм)':e.amount, 'Ким киритган':e.created_by_name
+  })), 'Тавсиф', ['Сумма (сўм)']));
 
   const metanMonths = [...new Set(state.entries.map(e=>e.date && e.date.slice(0,7)).filter(Boolean))].sort();
   addSheet('Oylik hisobot', metanMonths.map(m=>{
     const pl = computeMonthlyPL(m);
-    return { Oy:m, Daromad:pl.revenue, XarajatlarJami:pl.expensesTotal, Aksiz:pl.excise, NDS_netto:pl.ndsNet,
-      IjtimoiySoliq:pl.socialAmount, Foyda:pl.profitBeforeTax, FoydaSoligi:pl.profitTaxAmount, SofFoyda:pl.netProfit };
+    return { 'Ой':m, 'Даромад (сўм)':pl.revenue, 'Жами харажатлар (сўм)':pl.expensesTotal, 'Акциз (сўм)':pl.excise,
+      'НДС — соф (сўм)':pl.ndsNet, 'Ижтимоий солиқ (сўм)':pl.socialAmount, 'Солиққача фойда (сўм)':pl.profitBeforeTax,
+      'Фойда солиғи (сўм)':pl.profitTaxAmount, 'СОФ ФОЙДА (сўм)':pl.netProfit };
   }));
 
   XLSX.writeFile(wb, `Mangit_Metan_${todayISO()}.xlsx`);
@@ -2588,36 +2624,123 @@ function exportBenzinExcel(){
     XLSX.utils.book_append_sheet(wb, ws, name.slice(0,31));
   };
 
-  addSheet('Benzin kunlik', state.benzinEntries.map(e=>({
-    Sana:e.date, Operator:e.operator_name, Naqd:e.naqd, Uzkard:e.uzkard, Xumo:e.xumo, Kechagi:e.kechagi_note, Izoh:e.izoh,
-    Korsatkichlar: JSON.stringify(e.readings)
-  })));
+  addSheet('Benzin kunlik', withTotalRow(state.benzinEntries.map(e=>({
+    'Сана':e.date, 'Оператор':e.operator_name, 'Нақд (сўм)':e.naqd, 'UZCARD (сўм)':e.uzkard, 'HUMO (сўм)':e.xumo,
+    'Кечаги изоҳ':e.kechagi_note, 'Изоҳ':e.izoh, 'Калонка кўрсаткичлари':JSON.stringify(e.readings)
+  })), 'Оператор', ['Нақд (сўм)','UZCARD (сўм)','HUMO (сўм)']));
   addSheet('Benzin qabul qilish', state.benzinDeliveries.map(d=>({
-    Sana:d.date, TTN_raqami:d.ttn_number, Turi:fuelTypeName(d.fuel_type_id), Tonna:d.tons, Litr:d.liters, Summa:d.total_sum,
-    Yetkazibberuvchi:d.supplier_name, Shartnoma:d.contract_no, KimQabulQildi:d.received_by_name
+    'Сана':d.date, 'ТТН рақами':d.ttn_number, 'Тури':fuelTypeName(d.fuel_type_id), 'Тонна':d.tons, 'Литр':d.liters,
+    'Сумма (сўм)':d.total_sum, 'Етказиб берувчи':d.supplier_name, 'Шартнома':d.contract_no, 'Ким қабул қилди':d.received_by_name
   })));
   addSheet('Benzin kompaniya sotuvi', state.benzinCompanySales.map(s=>({
-    Kompaniya:(state.companies.find(c=>c.id===s.company_id)||{}).name||'', Turi:fuelTypeName(s.fuel_type_id), Litr:s.liters, Narx:s.price, Summa:s.sum
+    'Компания':(state.companies.find(c=>c.id===s.company_id)||{}).name||'', 'Тури':fuelTypeName(s.fuel_type_id),
+    'Литр':s.liters, 'Нарх (сўм/л)':s.price, 'Сумма (сўм)':s.sum
   })));
-  addSheet('Benzin narxlari', state.fuelPrices.map(p=>({ Turi:fuelTypeName(p.fuel_type_id), SanaDan:p.effective_date, Sotuv:p.sale_price, Aksiz:p.excise })));
-  addSheet('Zahira holati', benzinStockSummary().map(s=>({ Turi:s.fuelType.name, JamiKelgan:s.delivered, JamiSotilgan:s.sold, HisobiyQoldiq:s.balance })));
+  addSheet('Benzin narxlari', state.fuelPrices.map(p=>({ 'Тури':fuelTypeName(p.fuel_type_id), 'Сана (-дан)':p.effective_date, 'Сотув нархи (сўм/л)':p.sale_price, 'Акциз (сўм/л)':p.excise })));
+  addSheet('Zahira holati', benzinStockSummary().map(s=>({ 'Тури':s.fuelType.name, 'Жами келган (л)':s.delivered, 'Жами сотилган (л)':s.sold, 'Ҳисобий қолдиқ (л)':s.balance })));
   const benzinEmployees = employeesForStation('benzin');
-  addSheet('Benzin xodimlar', benzinEmployees.map(e=>({ Ism:e.full_name, Lavozim:e.position, Faol:e.active?'Ha':"Yo'q" })));
+  addSheet('Benzin xodimlar', benzinEmployees.map(e=>({ 'Исм':e.full_name, 'Лавозим':e.position, 'Фаол':e.active?'Ҳа':"Йўқ" })));
   addSheet('Benzin oyliklar tarixi', state.employeeSalaries.filter(s=>benzinEmployees.some(e=>e.id===s.employee_id)).map(s=>({
-    Xodim:(state.employees.find(e=>e.id===s.employee_id)||{}).full_name||'', SanaDan:s.effective_date, Summa:s.amount
+    'Ходим':(state.employees.find(e=>e.id===s.employee_id)||{}).full_name||'', 'Сана (-дан)':s.effective_date, 'Сумма (сўм)':s.amount
   })));
-  addSheet('Benzin doimiy xarajatlar', state.fixedCosts.filter(f=>(f.station||'metan')==='benzin').map(f=>({ SanaDan:f.effective_date, Elektr:f.electricity_tariff, KimKiritgan:f.created_by_name })));
-  addSheet('Benzin boshqa xarajatlar', state.otherExpenses.filter(e=>(e.station||'metan')==='benzin'));
+  addSheet('Benzin doimiy xarajatlar', state.fixedCosts.filter(f=>(f.station||'metan')==='benzin').map(f=>({ 'Сана (-дан)':f.effective_date, 'Электр тарифи (сўм)':f.electricity_tariff, 'Ким киритган':f.created_by_name })));
+  addSheet('Benzin boshqa xarajatlar', withTotalRow(state.otherExpenses.filter(e=>(e.station||'metan')==='benzin').map(e=>({
+    'Сана':e.date, 'Тавсиф':e.description, 'Сумма (сўм)':e.amount, 'Ким киритган':e.created_by_name
+  })), 'Тавсиф', ['Сумма (сўм)']));
 
   const benzinMonths = [...new Set(state.benzinEntries.map(e=>e.date && e.date.slice(0,7)).filter(Boolean))].sort();
   addSheet('Oylik hisobot (soff foyda)', benzinMonths.map(m=>{
     const pl = computeBenzinMonthlyPL(m);
-    return { Oy:m, Daromad:pl.revenue, Tannarx:pl.cogs, Elektr:pl.electricity, IshHaqi:pl.salary, BoshqaXarajat:pl.otherExp,
-      Aksiz:pl.excise, NDS_netto:pl.ndsNet, IjtimoiySoliq:pl.socialAmount, YalpiFoyda:pl.grossProfit,
-      FoydaSoligi:pl.profitTaxAmount, SofFoyda:pl.netProfit };
+    return { 'Ой':m, 'Даромад (сўм)':pl.revenue, 'Таннарх (сўм)':pl.cogs, 'Электр (сўм)':pl.electricity, 'Иш ҳақи (сўм)':pl.salary,
+      'Бошқа харажат (сўм)':pl.otherExp, 'Акциз (сўм)':pl.excise, 'НДС — соф (сўм)':pl.ndsNet, 'Ижтимоий солиқ (сўм)':pl.socialAmount,
+      'Ялпи фойда (сўм)':pl.grossProfit, 'Фойда солиғи (сўм)':pl.profitTaxAmount, 'СОФ ФОЙДА (сўм)':pl.netProfit };
   }));
 
   XLSX.writeFile(wb, `Mangit_Benzin_${todayISO()}.xlsx`);
+  toast("Юклаб олинди ✓");
+}
+
+// ============================================================
+// "Умумий ҳолат"дан бир ойлик ТЎЛИҸ ҲИСОБ-КИТОБ — бухгалтер учун,
+// қадам-бақадам (вертикал жадвал: сатр номи + қиймат), худди экрандаги
+// "Ойлик фойда ҳисоботи" кўриниши каби — лекин Excel файл сифатида.
+// ============================================================
+function exportMonthlyPLExcel(monthStr){
+  if(!monthStr){ toast("Ойни танланг"); return; }
+  if(typeof XLSX === 'undefined'){ toast("Excel кутубхонаси юкланмади — интернетни текшириб, саҳифани қайта юкланг"); return; }
+  const wb = XLSX.utils.book_new();
+  const addPLSheet = (name, lines) => {
+    const rows = lines.map(l => ({ 'Қатор': l.label, 'Сумма (сўм)': l.value==null? '' : l.value }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{wch:45},{wch:20}];
+    XLSX.utils.book_append_sheet(wb, ws, name.slice(0,31));
+  };
+
+  const mPL = computeMonthlyPL(monthStr);
+  addPLSheet('Метан — Oylik hisobot', [
+    { label: `${monthStr} — Метан, ${mPL.count} кунлик ҳисобот асосида` },
+    { label: 'ДАРОМАД' },
+    { label: 'Сотув суммаси (жами)', value: mPL.revenue },
+    { label: 'ХАРАЖАТЛАР' },
+    { label: 'Табиий газ (харид, Агрес асосида)', value: mPL.cogsGas },
+    { label: 'Электр энергияси', value: mPL.electricity },
+    { label: 'Иш ҳақи', value: mPL.salary },
+    { label: 'Банк кредити ва фоиз', value: mPL.bank },
+    { label: 'Бошқа харажатлар', value: mPL.otherExp },
+    { label: '= Харажатлар жами', value: mPL.expensesTotal },
+    { label: 'СОЛИҚЛАР' },
+    { label: 'Акциз солиғи (сотилган газ кубига)', value: mPL.excise },
+    { label: 'НДС — чиқим ('+pct(mPL.tax.nds_rate)+', сотувдан)', value: mPL.outputVat },
+    { label: 'НДС — кирим (газ+электр харидидан)', value: -mPL.inputVat },
+    { label: '= НДС (тўланадиган, нетто)', value: mPL.ndsNet },
+    { label: 'Ижтимоий солиқ ('+pct(mPL.tax.social_tax_rate)+', иш ҳақидан)', value: mPL.socialAmount },
+    { label: 'Ер ва мол-мулк солиғи', value: mPL.land },
+    { label: 'НАТИЖА' },
+    { label: '= Фойда (солиққача)', value: mPL.profitBeforeTax },
+    { label: '− Фойда солиғи ('+pct(mPL.tax.profit_tax_rate)+')', value: mPL.profitTaxAmount },
+    { label: '= СОФ ФОЙДА', value: mPL.netProfit },
+  ]);
+
+  const bPL = computeBenzinMonthlyPL(monthStr);
+  const benzinLines = [
+    { label: `${monthStr} — Бензин, ${bPL.count} кунлик ҳисобот асосида` },
+    { label: 'ДАРОМАД' },
+    { label: 'Сотув суммаси (жами)', value: bPL.revenue },
+    { label: 'ТАННАРХ (ёқилғи тури бўйича, ФИФО)' },
+  ];
+  (bPL.byFuelRows||[]).forEach(r=>{
+    benzinLines.push({ label: r.name+' — '+fmt(r.liters)+' л × '+fmt(r.costPrice)+' сўм', value: r.liters*r.costPrice });
+  });
+  benzinLines.push(
+    { label: '= Таннарх жами', value: bPL.cogs },
+    { label: 'ХАРАЖАТЛАР' },
+    { label: 'Электр энергияси', value: bPL.electricity },
+    { label: 'Иш ҳақи (Бензин ходимлари)', value: bPL.salary },
+    { label: 'Бошқа харажатлар', value: bPL.otherExp },
+    { label: '= Харажатлар жами', value: bPL.expensesTotal },
+    { label: 'СОЛИҚЛАР' },
+    { label: 'Акциз солиғи', value: bPL.excise },
+    { label: 'НДС — чиқим ('+pct(bPL.tax.nds_rate)+', сотувдан)', value: bPL.outputVat },
+    { label: 'НДС — кирим (ёқилғи+электр харидидан)', value: -bPL.inputVat },
+    { label: '= НДС (тўланадиган, нетто)', value: bPL.ndsNet },
+    { label: 'Ижтимоий солиқ ('+pct(bPL.tax.social_tax_rate)+', иш ҳақидан)', value: bPL.socialAmount },
+    { label: 'НАТИЖА' },
+    { label: '= Фойда (солиққача)', value: bPL.profitBeforeTax },
+    { label: '− Фойда солиғи ('+pct(bPL.tax.profit_tax_rate)+')', value: bPL.profitTaxAmount },
+    { label: '= СОФ ФОЙДА', value: bPL.netProfit },
+  );
+  addPLSheet('Бензин — Oylik hisobot', benzinLines);
+
+  addPLSheet('Умумий', [
+    { label: `${monthStr} — икки станция, алоҳида-алоҳида (қўшилмайди)` },
+    { label: 'Метан — сотув суммаси', value: mPL.revenue },
+    { label: 'Метан — СОФ фойда', value: mPL.netProfit },
+    { label: 'Бензин — сотув суммаси', value: bPL.revenue },
+    { label: 'Бензин — ялпи фойда (ҳозирча харажатлар тўлиқ бўлинмаган)', value: bPL.grossProfit },
+    { label: 'Бензин — СОФ фойда', value: bPL.netProfit },
+  ]);
+
+  XLSX.writeFile(wb, `Oylik_hisobot_${monthStr}.xlsx`);
   toast("Юклаб олинди ✓");
 }
 
