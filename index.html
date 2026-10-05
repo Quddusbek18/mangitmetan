@@ -1782,6 +1782,14 @@ function benzinFifoCogs(){
   const calc = benzinComputeAll();
   const asc = state.benzinEntries.slice().sort((a,b)=> a.date < b.date ? -1 : (a.date > b.date ? 1 : 0));
   const cogsByEntry = {};
+  // Партиялар тугаб қолганда қайтиш учун "сўнгги маълум ҳақиқий таннарх" —
+  // Созламалардаги cost_price'га ЭМАС (у ҳозир доим 0, чунки "Бензин
+  // созламалари" формаси уни киритишни сўрамайди — таннарх фақат ҳақиқий
+  // кирим ёзувларидан олиниши керак), балки шу ёки олдинги ҳисобот(лар)да
+  // ҳақиқий партиядан олинган ОХИРГИ нархдан фойдаланамиз. Шунда акциз ёки
+  // бошқа солиқ созламалари ўзгарса ҳам, таннарх ҳисоби ҳеч қачон бузилмайди —
+  // у фақат ҳақиқий кирим ёзувларига боғлиқ.
+  const lastKnownCost = {};
   asc.forEach(e=>{
     const c = calc[e.id];
     if(!c) return;
@@ -1795,16 +1803,20 @@ function benzinFifoCogs(){
         if(need <= 0) break;
         if(b.remaining <= 0) continue;
         const take = Math.min(b.remaining, need);
-        const cpl = (b.costPerLiter != null) ? b.costPerLiter : fuelPriceRowFor(ftId, b.date).cost_price;
+        const cpl = (b.costPerLiter != null) ? b.costPerLiter : (lastKnownCost[ftId] != null ? lastKnownCost[ftId] : fuelPriceRowFor(ftId, b.date).cost_price);
         cost += take * cpl;
         b.remaining -= take;
         need -= take;
+        if(cpl > 0) lastKnownCost[ftId] = cpl;
         FIFO_BATCH_EVENTS.push({ entryDate: e.date, ftId, batchDate: b.date, costPerLiter: cpl, liters: take, cost: take*cpl });
       }
       if(need > 0){
-        // Партиялар тугади / ёзилмаган — жорий (созламадаги) таннархдан фойдаланамиз.
-        const cpl = fuelPriceRowFor(ftId, e.date).cost_price;
+        // Партиялар тугади / ёзилмаган — сўнгги маълум ҳақиқий таннархдан
+        // фойдаланамиз (юқоридаги изоҳга қаранг); ҳеч қандай тарих бўлмаса,
+        // сўнгги чора сифатида Созламалардаги қийматга (одатда 0) тушамиз.
+        const cpl = lastKnownCost[ftId] != null ? lastKnownCost[ftId] : fuelPriceRowFor(ftId, e.date).cost_price;
         cost += need * cpl;
+        if(cpl > 0) lastKnownCost[ftId] = cpl;
         FIFO_BATCH_EVENTS.push({ entryDate: e.date, ftId, batchDate: null, costPerLiter: cpl, liters: need, cost: need*cpl });
       }
       byFuel[ftId] = { liters: c.soldByFuel[ftId], cogs: cost };
