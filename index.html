@@ -161,7 +161,7 @@ const PUMP_NAMES = ['K1','K2','K3','K4','K5','K6'];
 let state = {
   session: null, profile: null,
   companies: [], prices: [], taxRates: [], fixedCosts: [], prepayments: [], otherExpenses: [],
-  entries: [], deliveries: [], payments: [], gapLedger: [], entryEditLog: [], bankTx: []
+  entries: [], deliveries: [], payments: [], gapLedger: [], entryEditLog: [], bankTx: [], projectNotes: []
 };
 let pending = { deliveries: [] };
 let benzinPending = { sales: [] };
@@ -220,7 +220,7 @@ async function boot(){
 
   sb.auth.onAuthStateChange((event, session)=>{
     if(event === 'SIGNED_OUT'){ localStorage.removeItem('mm_login_at'); state = {session:null, profile:null, companies:[],prices:[],taxRates:[],fixedCosts:[],prepayments:[],otherExpenses:[],entries:[],deliveries:[],payments:[],
-      fuelTypes:[],fuelPrices:[],dispensers:[],benzinEntries:[],benzinCompanySales:[],benzinDeliveries:[],employees:[],employeeSalaries:[],gapLedger:[],entryEditLog:[],bankTx:[]}; renderLogin(); }
+      fuelTypes:[],fuelPrices:[],dispensers:[],benzinEntries:[],benzinCompanySales:[],benzinDeliveries:[],employees:[],employeeSalaries:[],gapLedger:[],entryEditLog:[],bankTx:[],projectNotes:[]}; renderLogin(); }
   });
 
   // Очиқ турган саҳифада ҳам 5 соат тўлганда автоматик чиқариб юбориш
@@ -290,7 +290,7 @@ async function afterLogin(session){
 async function loadAll(){
   const [companies, prices, taxRates, fixedCosts, prepayments, otherExpenses, entries, deliveries, payments,
     fuelTypes, fuelPrices, dispensers, benzinEntries, benzinCompanySales, benzinDeliveries,
-    employees, employeeSalaries, gapLedger, entryEditLog, bankTx] = await Promise.all([
+    employees, employeeSalaries, gapLedger, entryEditLog, bankTx, projectNotes] = await Promise.all([
     sb.from('companies').select('*').order('name'),
     sb.from('prices').select('*').order('effective_date'),
     sb.from('tax_rates').select('*').order('effective_date'),
@@ -311,6 +311,7 @@ async function loadAll(){
     sb.from('gap_ledger').select('*').order('date', {ascending:false}),
     sb.from('entry_edit_log').select('*').order('edited_at', {ascending:false}),
     sb.from('bank_tx').select('*').order('tx_date', {ascending:false}),
+    sb.from('project_notes').select('*').order('note_date', {ascending:false}),
   ]);
   state.companies = companies.data || [];
   state.prices = prices.data || [];
@@ -332,6 +333,7 @@ async function loadAll(){
   state.gapLedger = gapLedger.data || [];
   state.entryEditLog = entryEditLog.data || [];
   state.bankTx = bankTx.data || [];
+  state.projectNotes = projectNotes.data || [];
 }
 
 function priceFor(dateStr){
@@ -399,7 +401,7 @@ function tabsForRole(role, station){
     return [['bz_daily','📝 Кунлик ишлар'],['bz_reports','📊 Ҳисоботлар'],['bz_expenses','💸 Харажатлар'],['bz_salaries','👥 Ойликлар'],['bz_settings','⚙️ Созламалар']];
   }
   if(station === 'umumiy'){
-    if(role === 'ceo') return [['dashboard','📈 Умумий ҳолат'],['finance','🏦 Гурух молияси']];
+    if(role === 'ceo') return [['dashboard','📈 Умумий ҳолат'],['finance','🏦 Гурух молияси'],['projects','📁 Лойиҳалар']];
     return [['dashboard','📈 Умумий ҳолат']];
   }
   return [];
@@ -408,7 +410,7 @@ function tabsForRole(role, station){
 // нозик ажратувчи чизиқ қўйилади (оддий бир қатор рўйхат эмас).
 function tabGroup(id){
   if(id==='entry' || id==='bz_daily') return 'work';
-  if(id==='overview' || id==='dashboard' || id==='finance') return 'overview';
+  if(id==='overview' || id==='dashboard' || id==='finance' || id==='projects') return 'overview';
   if(id==='reports' || id==='davlat' || id==='gap' || id==='bz_reports') return 'reports';
   if(id==='companies' || id==='expenses' || id==='salaries' || id==='bz_expenses' || id==='bz_salaries') return 'manage';
   if(id==='settings' || id==='bz_settings') return 'system';
@@ -434,6 +436,7 @@ const TAB_ICONS = {
   settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>',
   bz_settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>',
   finance: '<line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/>',
+  projects: '<path d="M3 7h5l2 3h11v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z"/>',
 };
 function tabIconSvg(id){
   const p = TAB_ICONS[id];
@@ -509,6 +512,7 @@ function renderTab(){
   else if(activeTab==='bz_settings') body.innerHTML = tplBenzinSettings();
   else if(activeTab==='dashboard') body.innerHTML = tplDashboard();
   else if(activeTab==='finance') body.innerHTML = tplFinance();
+  else if(activeTab==='projects') body.innerHTML = tplProjects();
   afterRenderTab();
 }
 function afterRenderTab(){
@@ -762,6 +766,73 @@ async function saveBankTxTag(id, field, value){
 async function deleteBankTx(id){
   if(!confirm('Ўчирасизми?')) return;
   const { error } = await sb.from('bank_tx').delete().eq('id', id);
+  if(error){ toast('Хатолик: '+error.message); return; }
+  toast('Ўчирилди ✓'); await loadAll(); renderTab();
+}
+
+// ============================================================
+// PROJECTS (investment) REGISTRY — "Лойиҳалар", CEO-only
+// Ресторан қурилиши / 40 та учаска / Қурилиш компанияси
+// инвестицияси — пул ҳаракати bank_tx'дан, ҳолат/прогресс эса
+// project_notes'дан (қисқа матнли ёзувлар тарихи).
+// ============================================================
+const INVESTMENT_PROJECTS = [
+  { key: 'restoran', name: 'Ресторан қурилиши', hint: 'Заправка даромади ҳисобидан қурилаяпти. Тугатилгандан кейин олинган кредитнинг 1.5 млрд сўмлик қисми озод бўлади.' },
+  { key: 'uchaska', name: '40 та учаска (уй-жой қурилиши)', hint: '20 таси сотилиб эгаларига топширилган, қолган қисми секин қурилаяпти.' },
+  { key: 'qurilish_kompaniya', name: 'Қурилиш компаниясига инвестиция', hint: 'Таниш ва унинг 3 ўғли бошқарадиган қурилиш компаниясига қилинган инвестиция — расмий тизим йўқ, шунинг учун шу ерда назорат қилинади.' }
+];
+function projectMoneyTotals(key){
+  const rows = (state.bankTx||[]).filter(r=>r.project===key);
+  let inflow=0, outflow=0;
+  rows.forEach(r=>{ const a=Number(r.amount)||0; if(a>=0) inflow+=a; else outflow+=-a; });
+  return { inflow, outflow, net: inflow-outflow, count: rows.length };
+}
+function tplProjects(){
+  return INVESTMENT_PROJECTS.map(p=>{
+    const m = projectMoneyTotals(p.key);
+    const notes = (state.projectNotes||[]).filter(n=>n.project===p.key).slice().sort((a,b)=> a.note_date < b.note_date ? 1 : -1);
+    return `
+    <div class="card">
+      <div class="section-title"><h2>${p.name}</h2></div>
+      <p class="hint">${p.hint}</p>
+      <div class="tile-row" style="margin-top:10px">
+        <div class="tile"><div class="label">Жами киритилган</div><div class="value good">${fmt(m.inflow)}</div></div>
+        <div class="tile"><div class="label">Жами сарфланган/олинган</div><div class="value bad">${fmt(m.outflow)}</div></div>
+        <div class="tile"><div class="label">Соф қолдиқ</div><div class="value ${m.net<0?'bad':'good'}">${fmt(m.net)}</div></div>
+      </div>
+      <p class="hint" style="margin-top:6px">Манбаи: "Гурух молияси" таб'идаги шу йўналишга белгиланган ${m.count} та транзакция.</p>
+      <div class="action-box" style="margin-top:12px">
+        <h3>+ Ҳолат/прогресс ёзуви қўшиш</h3>
+        <div class="row" style="margin-top:8px">
+          <div class="field"><label>Сана</label><input type="date" id="pn_date_${p.key}" value="${todayISO()}"></div>
+          <div class="field" style="flex:3"><label>Ёзув</label><input type="text" id="pn_text_${p.key}" placeholder="масалан: яна 3 та уй томи қопланди"></div>
+          <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addProjectNote('${p.key}')">Қўшиш</button></div>
+        </div>
+      </div>
+      <h3 style="margin-top:14px">Тарих</h3>
+      <div class="table-wrap" style="margin-top:8px">
+        <table><thead><tr><th>Сана</th><th>Ёзув</th><th>Ким киритган</th><th></th></tr></thead>
+        <tbody>${notes.map(n=>`
+          <tr><td>${n.note_date||''}</td><td>${esc(n.note)}</td><td class="hint">${esc(n.created_by_name||'—')}</td>
+            <td><button class="del" onclick="deleteProjectNote('${n.id}')" title="Ўчириш">✕</button></td></tr>`
+        ).join('') || `<tr><td colspan="4" class="empty">Ҳали ёзув йўқ</td></tr>`}</tbody></table>
+      </div>
+    </div>`;
+  }).join('');
+}
+async function addProjectNote(project){
+  const dateVal = document.getElementById('pn_date_'+project).value;
+  const textVal = document.getElementById('pn_text_'+project).value.trim();
+  if(!dateVal || !textVal){ toast('Сана ва ёзувни киритинг'); return; }
+  const { error } = await sb.from('project_notes').insert({
+    project, note_date: dateVal, note: textVal, created_by_name: state.profile.full_name
+  });
+  if(error){ toast('Хатолик: '+error.message); return; }
+  toast('Сақланди ✓'); await loadAll(); renderTab();
+}
+async function deleteProjectNote(id){
+  if(!confirm('Ўчирасизми?')) return;
+  const { error } = await sb.from('project_notes').delete().eq('id', id);
   if(error){ toast('Хатолик: '+error.message); return; }
   toast('Ўчирилди ✓'); await loadAll(); renderTab();
 }
