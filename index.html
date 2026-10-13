@@ -161,7 +161,7 @@ const PUMP_NAMES = ['K1','K2','K3','K4','K5','K6'];
 let state = {
   session: null, profile: null,
   companies: [], prices: [], taxRates: [], fixedCosts: [], prepayments: [], otherExpenses: [],
-  entries: [], deliveries: [], payments: [], gapLedger: [], entryEditLog: []
+  entries: [], deliveries: [], payments: [], gapLedger: [], entryEditLog: [], bankTx: []
 };
 let pending = { deliveries: [] };
 let benzinPending = { sales: [] };
@@ -220,7 +220,7 @@ async function boot(){
 
   sb.auth.onAuthStateChange((event, session)=>{
     if(event === 'SIGNED_OUT'){ localStorage.removeItem('mm_login_at'); state = {session:null, profile:null, companies:[],prices:[],taxRates:[],fixedCosts:[],prepayments:[],otherExpenses:[],entries:[],deliveries:[],payments:[],
-      fuelTypes:[],fuelPrices:[],dispensers:[],benzinEntries:[],benzinCompanySales:[],benzinDeliveries:[],employees:[],employeeSalaries:[],gapLedger:[],entryEditLog:[]}; renderLogin(); }
+      fuelTypes:[],fuelPrices:[],dispensers:[],benzinEntries:[],benzinCompanySales:[],benzinDeliveries:[],employees:[],employeeSalaries:[],gapLedger:[],entryEditLog:[],bankTx:[]}; renderLogin(); }
   });
 
   // Очиқ турган саҳифада ҳам 5 соат тўлганда автоматик чиқариб юбориш
@@ -290,7 +290,7 @@ async function afterLogin(session){
 async function loadAll(){
   const [companies, prices, taxRates, fixedCosts, prepayments, otherExpenses, entries, deliveries, payments,
     fuelTypes, fuelPrices, dispensers, benzinEntries, benzinCompanySales, benzinDeliveries,
-    employees, employeeSalaries, gapLedger, entryEditLog] = await Promise.all([
+    employees, employeeSalaries, gapLedger, entryEditLog, bankTx] = await Promise.all([
     sb.from('companies').select('*').order('name'),
     sb.from('prices').select('*').order('effective_date'),
     sb.from('tax_rates').select('*').order('effective_date'),
@@ -310,6 +310,7 @@ async function loadAll(){
     sb.from('employee_salaries').select('*').order('effective_date'),
     sb.from('gap_ledger').select('*').order('date', {ascending:false}),
     sb.from('entry_edit_log').select('*').order('edited_at', {ascending:false}),
+    sb.from('bank_tx').select('*').order('tx_date', {ascending:false}),
   ]);
   state.companies = companies.data || [];
   state.prices = prices.data || [];
@@ -330,6 +331,7 @@ async function loadAll(){
   state.employeeSalaries = employeeSalaries.data || [];
   state.gapLedger = gapLedger.data || [];
   state.entryEditLog = entryEditLog.data || [];
+  state.bankTx = bankTx.data || [];
 }
 
 function priceFor(dateStr){
@@ -396,14 +398,17 @@ function tabsForRole(role, station){
     if(role === 'direktor') return [['bz_reports','📊 Ҳисоботлар'],['bz_expenses','💸 Харажатлар'],['bz_salaries','👥 Ойликлар']];
     return [['bz_daily','📝 Кунлик ишлар'],['bz_reports','📊 Ҳисоботлар'],['bz_expenses','💸 Харажатлар'],['bz_salaries','👥 Ойликлар'],['bz_settings','⚙️ Созламалар']];
   }
-  if(station === 'umumiy') return [['dashboard','📈 Умумий ҳолат']];
+  if(station === 'umumiy'){
+    if(role === 'ceo') return [['dashboard','📈 Умумий ҳолат'],['finance','🏦 Гурух молияси']];
+    return [['dashboard','📈 Умумий ҳолат']];
+  }
   return [];
 }
 // Табларни мантиқий гуруҳларга ажратиш — навигацияда гуруҳлар орасига
 // нозик ажратувчи чизиқ қўйилади (оддий бир қатор рўйхат эмас).
 function tabGroup(id){
   if(id==='entry' || id==='bz_daily') return 'work';
-  if(id==='overview' || id==='dashboard') return 'overview';
+  if(id==='overview' || id==='dashboard' || id==='finance') return 'overview';
   if(id==='reports' || id==='davlat' || id==='gap' || id==='bz_reports') return 'reports';
   if(id==='companies' || id==='expenses' || id==='salaries' || id==='bz_expenses' || id==='bz_salaries') return 'manage';
   if(id==='settings' || id==='bz_settings') return 'system';
@@ -428,6 +433,7 @@ const TAB_ICONS = {
   bz_salaries: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
   settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>',
   bz_settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>',
+  finance: '<line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/>',
 };
 function tabIconSvg(id){
   const p = TAB_ICONS[id];
@@ -502,6 +508,7 @@ function renderTab(){
   else if(activeTab==='bz_salaries') body.innerHTML = tplSalaries(role, 'benzin');
   else if(activeTab==='bz_settings') body.innerHTML = tplBenzinSettings();
   else if(activeTab==='dashboard') body.innerHTML = tplDashboard();
+  else if(activeTab==='finance') body.innerHTML = tplFinance();
   afterRenderTab();
 }
 function afterRenderTab(){
@@ -578,6 +585,185 @@ function renderGazForecast(){
       <div class="tile"><div class="label">Қолдиқ (қиймати)</div><div class="value ${s.remainingValue<0?'bad':'good'}">${fmt(s.remainingValue)} сўм</div></div>
     </div>
     <p class="hint" style="margin-top:6px">Қолдиқ — ҳар бир препеймент партиясининг ҲАЛИ ИШЛАТИЛМАГАН қисми, ўзининг нархида (ФИФО). Ҳажми (m3) киритилмаган эски партиялар учун тахминий ҳажм ишлатилади.</p>`;
+}
+
+// ============================================================
+// GROUP FINANCE (bank_tx) — "Гурух молияси", CEO-only
+// Банк кўчирмасини юклаш/қўлда киритиш ва ҚАЕРГА (бизнес + лойиҳа)
+// тегишли эканини белгилаш (teglash), шунингдек лойиҳалар бўйича
+// жами баланс.
+// ============================================================
+const PROJECT_LABELS = {
+  benzin: 'Бензин',
+  metan: 'Метан',
+  restoran: 'Ресторан',
+  uchaska: '40 та участка',
+  qurilish_kompaniya: 'Қурилиш компанияси (шериклар)'
+};
+const ENTITY_LABELS = { servis: 'Сервис', mangit_metan: 'Мангит Метан' };
+
+function tplFinance(){
+  const rows = state.bankTx || [];
+  const untaggedCount = rows.filter(r=>!r.project).length;
+  const totalsByProject = {};
+  Object.keys(PROJECT_LABELS).forEach(k=> totalsByProject[k] = 0);
+  const totalsByEntity = { servis: 0, mangit_metan: 0 };
+  rows.forEach(r=>{
+    const amt = Number(r.amount) || 0;
+    if(r.project && totalsByProject.hasOwnProperty(r.project)) totalsByProject[r.project] += amt;
+    if(r.entity && totalsByEntity.hasOwnProperty(r.entity)) totalsByEntity[r.entity] += amt;
+  });
+  const sorted = rows.slice().sort((a,b)=> a.tx_date < b.tx_date ? 1 : -1);
+  return `
+  <div class="card">
+    <div class="section-title"><h2>Лойиҳалар бўйича баланс</h2></div>
+    <p class="hint">Ҳар бир йўналишга тегишли барча (белгиланган) транзакциялар жами — бутун вақт давомида. Мусбат = шу йўналишга нетто киритилган пул, манфий = нетто олинган/сарфланган пул.</p>
+    <div class="tile-row" style="margin-top:10px;flex-wrap:wrap">
+      ${Object.keys(PROJECT_LABELS).map(k=>`
+        <div class="tile"><div class="label">${PROJECT_LABELS[k]}</div><div class="value ${totalsByProject[k]<0?'bad':'good'}">${fmt(totalsByProject[k])}</div></div>`).join('')}
+    </div>
+    <div class="tile-row" style="margin-top:10px">
+      <div class="tile"><div class="label">Сервис (жами)</div><div class="value ${totalsByEntity.servis<0?'bad':'good'}">${fmt(totalsByEntity.servis)}</div></div>
+      <div class="tile"><div class="label">Мангит Метан (жами)</div><div class="value ${totalsByEntity.mangit_metan<0?'bad':'good'}">${fmt(totalsByEntity.mangit_metan)}</div></div>
+      ${untaggedCount>0 ? `<div class="tile"><div class="label">Белгиланмаган</div><div class="value warn">${untaggedCount} та</div></div>` : ''}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-title"><h2>Банк кўчирмасини юклаш</h2></div>
+    <p class="hint">SQB'дан олинган Excel ёки CSV кўчирмани шу ерга юкланг — тизим сатрларни ўзи ўқишга ҳаракат қилади (сана, сумма, ким/нима, изоҳ устунларини тахмин қилиб). Устунларни тополмаса, пастда қайси устунлар борлигини кўрсатади — у ҳолда қуйидаги "Қўлда қўшиш" орқали киритинг.</p>
+    <div class="action-box" style="margin-top:10px">
+      <input type="file" id="bt_file" accept=".xlsx,.xls,.csv">
+      <button class="btn small" onclick="importBankTxFile()" style="margin-left:8px">Юклаш</button>
+      <div id="bt_import_status" class="hint" style="margin-top:6px"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="action-box" style="margin-top:0">
+      <h3>+ Қўлда қўшиш</h3>
+      <div class="row" style="margin-top:8px">
+        <div class="field"><label>Сана</label><input type="date" id="bt_date" value="${todayISO()}"></div>
+        <div class="field"><label>Сумма (+ кирим / − чиқим)</label><input type="number" id="bt_amount" step="1"></div>
+        <div class="field" style="flex:2"><label>Ким / нима</label><input type="text" id="bt_counterparty"></div>
+        <div class="field" style="flex:2"><label>Изоҳ</label><input type="text" id="bt_desc"></div>
+        <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addBankTxManual()">Қўшиш</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-title"><h2>Транзакциялар (${sorted.length})</h2></div>
+    <p class="hint">Ҳар бир сатрга қайси бизнес (Сервис/Мангит Метан) ва қайси йўналишга тегишли эканини танланг — юқоридаги жадвал автоматик қайта ҳисобланади (саҳифани қайта очганда).</p>
+    <div class="table-wrap" style="margin-top:8px">
+      <table><thead><tr><th>Сана</th><th>Сумма</th><th>Ким/нима</th><th>Изоҳ</th><th>Бизнес</th><th>Йўналиш</th><th></th></tr></thead>
+      <tbody>${sorted.map(r=>`
+        <tr>
+          <td>${r.tx_date||''}</td>
+          <td class="${Number(r.amount)<0?'bad':'good'}">${fmt(r.amount)}</td>
+          <td>${esc(r.counterparty||'')}</td>
+          <td>${esc(r.description||'')}</td>
+          <td><select onchange="saveBankTxTag('${r.id}','entity',this.value)">
+            <option value="">—</option>
+            ${Object.keys(ENTITY_LABELS).map(k=>`<option value="${k}" ${r.entity===k?'selected':''}>${ENTITY_LABELS[k]}</option>`).join('')}
+          </select></td>
+          <td><select onchange="saveBankTxTag('${r.id}','project',this.value)">
+            <option value="">—</option>
+            ${Object.keys(PROJECT_LABELS).map(k=>`<option value="${k}" ${r.project===k?'selected':''}>${PROJECT_LABELS[k]}</option>`).join('')}
+          </select></td>
+          <td><button class="del" onclick="deleteBankTx('${r.id}')" title="Ўчириш">✕</button></td>
+        </tr>`).join('') || `<tr><td colspan="7" class="empty">Ҳали транзакция йўқ — юқорида файл юкланг ёки қўлда қўшинг</td></tr>`}</tbody></table>
+    </div>
+  </div>`;
+}
+async function importBankTxFile(){
+  const fileEl = document.getElementById('bt_file');
+  const statusEl = document.getElementById('bt_import_status');
+  if(!fileEl.files.length){ statusEl.textContent = 'Файл танланмади'; return; }
+  const file = fileEl.files[0];
+  statusEl.textContent = 'Юкланяпти...';
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array'});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rawRows = XLSX.utils.sheet_to_json(ws, {defval:''});
+    if(!rawRows.length){ statusEl.textContent = 'Файлда маълумот топилмади'; return; }
+    const headers = Object.keys(rawRows[0]);
+    const findCol = (keys) => headers.find(h => keys.some(k => String(h).toLowerCase().includes(k)));
+    const dateCol = findCol(['sana','дата','date','кун']);
+    const amountCol = findCol(['sum','сумма','amount','miqdor','миқдор']);
+    const debitCol = findCol(['чиқим','debet','дебет','расход','chiqim','списан']);
+    const creditCol = findCol(['кирим','kredit','кредит','доход','kirim','зачисл']);
+    const partyCol = findCol(['контрагент','kontragent','получатель','отправитель','клиент','nomi','плательщик']);
+    const descCol = findCol(['назначение','izoh','описание','maqsad',"ta'rif",'коммент']);
+    if(!dateCol || (!amountCol && !debitCol && !creditCol)){
+      statusEl.textContent = 'Устунларни аниқлаб бўлмади. Файлдаги устунлар: '+headers.join(', ')+'. Қўлда қўшинг.';
+      return;
+    }
+    const parsed = rawRows.map(r=>{
+      let amount;
+      if(amountCol) amount = parseFloat(r[amountCol]) || 0;
+      else {
+        const debit = parseFloat(r[debitCol]) || 0;
+        const credit = parseFloat(r[creditCol]) || 0;
+        amount = credit - debit;
+      }
+      const dateVal = r[dateCol];
+      let tx_date;
+      if(typeof dateVal === 'number'){
+        const d = XLSX.SSF.parse_date_code(dateVal);
+        tx_date = `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;
+      } else {
+        const s = String(dateVal).trim();
+        const m = s.match(/(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})/);
+        if(m) tx_date = `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+        else tx_date = s.slice(0,10);
+      }
+      return {
+        tx_date,
+        amount,
+        counterparty: partyCol ? String(r[partyCol]||'').trim() || null : null,
+        description: descCol ? String(r[descCol]||'').trim() || null : null,
+        created_by_name: state.profile.full_name
+      };
+    }).filter(r=> r.tx_date && /^\d{4}-\d{2}-\d{2}$/.test(r.tx_date) && !isNaN(r.amount) && r.amount !== 0);
+    if(!parsed.length){ statusEl.textContent = 'Тўғри сатрлар топилмади. Файлдаги устунлар: '+headers.join(', '); return; }
+    const { error } = await sb.from('bank_tx').insert(parsed);
+    if(error){ statusEl.textContent = 'Хатолик: '+error.message; return; }
+    statusEl.textContent = `${parsed.length} та сатр юкланди ✓ — энди пастдаги жадвалда ҳар бирини белгиланг.`;
+    toast(`${parsed.length} та транзакция қўшилди ✓`);
+    fileEl.value = '';
+    await loadAll(); renderTab();
+  }catch(e){
+    statusEl.textContent = 'Хатолик: '+e.message;
+  }
+}
+async function addBankTxManual(){
+  const amount = parseFloat(document.getElementById('bt_amount').value);
+  if(isNaN(amount) || !document.getElementById('bt_date').value){ toast('Сана ва суммани киритинг'); return; }
+  const { error } = await sb.from('bank_tx').insert({
+    tx_date: document.getElementById('bt_date').value,
+    amount,
+    counterparty: document.getElementById('bt_counterparty').value.trim() || null,
+    description: document.getElementById('bt_desc').value.trim() || null,
+    created_by_name: state.profile.full_name
+  });
+  if(error){ toast('Хатолик: '+error.message); return; }
+  toast('Сақланди ✓'); await loadAll(); renderTab();
+}
+async function saveBankTxTag(id, field, value){
+  const patch = {}; patch[field] = value || null;
+  const { error } = await sb.from('bank_tx').update(patch).eq('id', id);
+  if(error){ toast('Хатолик: '+error.message); return; }
+  const row = (state.bankTx||[]).find(r=>r.id===id);
+  if(row) row[field] = value || null;
+  toast('Сақланди ✓');
+}
+async function deleteBankTx(id){
+  if(!confirm('Ўчирасизми?')) return;
+  const { error } = await sb.from('bank_tx').delete().eq('id', id);
+  if(error){ toast('Хатолик: '+error.message); return; }
+  toast('Ўчирилди ✓'); await loadAll(); renderTab();
 }
 
 // ============================================================
