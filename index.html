@@ -7,90 +7,131 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600&display=swap">
 <style>
 :root{
-  --bg:#F1F5FB; --surface:#FFFFFF; --border:#DCE6F2; --fg:#132236; --muted:#5B7089;
-  --accent:#2563EB; --accent-fg:#FFFFFF; --good:#16A34A; --bad:#DC2626; --warn:#D97706; --orange:#EA580C;
-  --blue:#0EA5E9; --purple:#7C3AED;
+  /* "Ўлчагич" (gauge/dial) палитаси — газ алангаси каби тўқ петрол-кўк асос,
+     ёнилғи ҳисоблагич латунь акценти билан. Умумий "SaaS кўк" ўрнига. */
+  --bg:#EEF2F0; --surface:#FFFFFF; --surface-2:#F5F8F6; --border:#D8E2DE; --border-strong:#C3D1CB;
+  --fg:#152420; --muted:#5C6E68;
+  --accent:#0E6B5C; --accent-hover:#0B5A4E; --accent-wash:#0E6B5C14; --accent-fg:#FFFFFF;
+  --gold:#B9842F; --gold-wash:#B9842F16;
+  --good:#157A42; --bad:#B3321B; --warn:#AD7510; --orange:#C05F0C;
+  --blue:#345F86; --purple:#6A4C9C;
   --font-display:'Inter',system-ui,-apple-system,sans-serif; --font-body:'Inter',system-ui,-apple-system,sans-serif; --font-mono:'JetBrains Mono',ui-monospace,monospace;
+  --shadow-sm:0 1px 2px rgba(14,28,22,.07), 0 1px 1px rgba(14,28,22,.04);
+  --shadow-md:0 6px 16px rgba(14,28,22,.10), 0 2px 4px rgba(14,28,22,.06);
+  --shadow-lift:0 10px 24px rgba(14,28,22,.14), 0 2px 6px rgba(14,28,22,.08);
+  --r-lg:16px; --r-md:11px; --r-sm:8px;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#0B1220; --surface:#121D30; --border:#223148; --fg:#E7EEF9; --muted:#8CA0BC;
-    --accent:#4C8DFF; --accent-fg:#0B1220; --good:#34D399; --bad:#F87171; --warn:#FBBF24; --orange:#FB923C;
-    --blue:#38BDF8; --purple:#A78BFA;
+    --bg:#0C1512; --surface:#152420; --surface-2:#1A2B26; --border:#263C35; --border-strong:#32504A;
+    --fg:#E9F2EF; --muted:#8FA6A0;
+    --accent:#28BC97; --accent-hover:#3ECFAA; --accent-wash:#28BC971F; --accent-fg:#06211B;
+    --gold:#E3A64B; --gold-wash:#E3A64B22;
+    --good:#34D399; --bad:#F2795A; --warn:#E8B548; --orange:#F0914A;
+    --blue:#6FA8D8; --purple:#B79AE0;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.35);
+    --shadow-md:0 6px 16px rgba(0,0,0,.40);
+    --shadow-lift:0 10px 26px rgba(0,0,0,.48);
   }
 }
 *{box-sizing:border-box}
-body{background:var(--bg);color:var(--fg);font-family:var(--font-body);margin:0;padding:16px;padding-block:20px;line-height:1.45}
+@media (prefers-reduced-motion: reduce){ *{transition-duration:0.001ms !important; animation-duration:0.001ms !important} }
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);margin:0;padding:16px;padding-block:20px;line-height:1.5;-webkit-font-smoothing:antialiased}
 .wrap{max-width:820px;margin:0 auto}
-h1,h2,h3{font-family:var(--font-display);font-weight:600;margin:0 0 4px}
-h1{font-size:1.4rem}
+h1,h2,h3{font-family:var(--font-display);font-weight:700;margin:0 0 4px;letter-spacing:-.01em}
+h1{font-size:1.45rem;font-weight:800}
 h2{font-size:1.05rem}
-h3{font-size:.92rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+h3{font-size:.76rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
 .sub{color:var(--muted);font-size:.85rem;margin:0 0 16px}
 .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px}
 .who{font-size:.8rem;color:var(--muted)}
-.tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;position:sticky;top:0;background:var(--bg);padding-block:6px;z-index:5}
-.tab-btn{padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--fg);font-size:.85rem;font-weight:600;cursor:pointer}
-.tab-btn.active{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 1px 2px rgba(19,34,54,.04)}
-.card.group-income{border-left:4px solid var(--good)}
-.card.group-expense{border-left:4px solid var(--bad)}
-.card.group-tax{border-left:4px solid var(--purple)}
-.card.group-company{border-left:4px solid var(--blue)}
-.card.group-settings{border-left:4px solid var(--warn)}
+.tabs{display:flex;gap:4px;margin-bottom:18px;flex-wrap:wrap;position:sticky;top:0;background:var(--bg);padding:6px;border-radius:var(--r-md);z-index:5;border:1px solid var(--border)}
+.tab-btn{padding:8px 13px;border-radius:var(--r-sm);border:none;background:transparent;color:var(--muted);font-size:.85rem;font-weight:700;cursor:pointer;transition:background .15s,color .15s}
+.tab-btn:hover{background:var(--surface-2);color:var(--fg)}
+.tab-btn.active{background:var(--accent);color:var(--accent-fg);box-shadow:var(--shadow-sm)}
+.tab-btn.active:hover{background:var(--accent-hover)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:18px;margin-bottom:14px;box-shadow:var(--shadow-sm)}
+.card.group-income{border-left:3px solid var(--good)}
+.card.group-expense{border-left:3px solid var(--bad)}
+.card.group-tax{border-left:3px solid var(--purple)}
+.card.group-company{border-left:3px solid var(--blue)}
+.card.group-settings{border-left:3px solid var(--gold)}
 .row{display:flex;gap:10px;flex-wrap:wrap}
-.field{flex:1;min-width:120px;display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
-label{font-size:.78rem;color:var(--muted);font-weight:600}
-input,select,textarea{font-family:var(--font-body);font-size:.95rem;padding:9px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--fg);width:100%}
-input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
+.field{flex:1;min-width:120px;display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+label{font-size:.76rem;color:var(--muted);font-weight:700;letter-spacing:.01em}
+input,select,textarea{font-family:var(--font-body);font-size:.95rem;padding:9px 11px;border-radius:var(--r-sm);border:1px solid var(--border);background:var(--surface-2);color:var(--fg);width:100%;transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-wash);background:var(--surface)}
 textarea{min-height:60px;resize:vertical}
-.btn{padding:10px 16px;border-radius:9px;border:none;background:var(--accent);color:var(--accent-fg);font-weight:700;font-size:.9rem;cursor:pointer;transition:filter .15s}
-.btn:not(:disabled):hover{filter:brightness(1.08)}
-.btn.secondary{background:transparent;border:1px solid var(--border);color:var(--fg)}
-.btn.danger{background:var(--bad);color:#fff}
-.btn.small{padding:6px 10px;font-size:.8rem}
-.btn:disabled{opacity:.5;cursor:not-allowed}
-.list-item{display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:.88rem}
+.btn{padding:10px 17px;border-radius:var(--r-sm);border:1px solid var(--accent-hover);background:linear-gradient(180deg,var(--accent) 0%,var(--accent-hover) 100%);color:var(--accent-fg);font-weight:700;font-size:.9rem;cursor:pointer;box-shadow:var(--shadow-sm);transition:transform .1s,box-shadow .1s,filter .15s}
+.btn:not(:disabled):hover{filter:brightness(1.07);box-shadow:var(--shadow-md);transform:translateY(-1px)}
+.btn:not(:disabled):active{transform:translateY(0);filter:brightness(.97);box-shadow:var(--shadow-sm)}
+.btn.secondary{background:var(--surface);border:1px solid var(--border-strong);color:var(--fg);box-shadow:none}
+.btn.secondary:not(:disabled):hover{background:var(--surface-2);box-shadow:var(--shadow-sm)}
+.btn.danger{background:linear-gradient(180deg,var(--bad) 0%,#8F2714 100%);border-color:#8F2714;color:#fff}
+.btn.small{padding:6px 11px;font-size:.8rem}
+.btn:disabled{opacity:.45;cursor:not-allowed;box-shadow:none;transform:none}
+.list-item{display:flex;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:.88rem}
 .list-item:last-child{border-bottom:none}
-.list-item .del{margin-left:auto;background:none;border:none;color:var(--bad);cursor:pointer;font-size:1rem;padding:2px 8px}
+.list-item .del{margin-left:auto;background:none;border:none;color:var(--bad);cursor:pointer;font-size:1rem;padding:2px 8px;border-radius:var(--r-sm)}
+.list-item .del:hover{background:color-mix(in srgb, var(--bad) 12%, transparent)}
 .tile-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px}
-.tile{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;box-shadow:0 1px 2px rgba(19,34,54,.04)}
-.tile .label{font-size:.72rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em}
-.tile .value{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:1.2rem;font-weight:700;margin-top:4px}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);padding:13px 14px;box-shadow:var(--shadow-sm)}
+.tile .label{font-size:.7rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.tile .value{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:1.25rem;font-weight:700;margin-top:5px;letter-spacing:-.01em}
 .tile .value.good{color:var(--good)} .tile .value.bad{color:var(--bad)}
 table{width:100%;border-collapse:collapse;font-size:.83rem}
-th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums}
-th{color:var(--muted);font-weight:600;font-size:.7rem;text-transform:uppercase}
-.table-wrap{overflow-x:auto}
-.pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.72rem;font-weight:700}
-.pill.bad{background:color-mix(in srgb, var(--bad) 18%, transparent);color:var(--bad)}
-.pill.good{background:color-mix(in srgb, var(--good) 18%, transparent);color:var(--good)}
-.pill.orange{background:color-mix(in srgb, var(--orange) 18%, transparent);color:var(--orange)}
-.pill.warn{background:color-mix(in srgb, var(--warn) 18%, transparent);color:var(--warn)}
+th,td{text-align:left;padding:8px 7px;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums}
+th{color:var(--muted);font-weight:700;font-size:.68rem;text-transform:uppercase;letter-spacing:.03em}
+tbody tr:hover td{background:var(--surface-2)}
+.table-wrap{overflow-x:auto;border-radius:var(--r-sm)}
+.pill{display:inline-block;padding:3px 9px;border-radius:999px;font-size:.72rem;font-weight:700}
+.pill.bad{background:color-mix(in srgb, var(--bad) 16%, transparent);color:var(--bad)}
+.pill.good{background:color-mix(in srgb, var(--good) 16%, transparent);color:var(--good)}
+.pill.orange{background:color-mix(in srgb, var(--orange) 16%, transparent);color:var(--orange)}
+.pill.warn{background:color-mix(in srgb, var(--warn) 16%, transparent);color:var(--warn)}
 .hint{font-size:.78rem;color:var(--muted);margin-top:2px}
-.pl-row{display:flex;justify-content:space-between;align-items:baseline;padding:7px 2px;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums;font-size:.9rem}
+.pl-row{display:flex;justify-content:space-between;align-items:baseline;padding:8px 2px;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums;font-size:.9rem}
 .pl-row.pl-indent{padding-left:14px;font-size:.83rem;color:var(--muted)}
 .pl-row.pl-bold{font-weight:700;font-size:1rem;border-bottom:2px solid var(--fg);margin-top:4px}
 .pl-row .good-text{color:var(--good)}
 .pl-row .bad-text{color:var(--bad)}
-.pl-group-title{font-size:.72rem;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);font-weight:700;margin-top:12px;margin-bottom:2px}
+.pl-group-title{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;margin-top:12px;margin-bottom:2px}
 .pl-group-title:first-of-type{margin-top:0}
-.empty{color:var(--muted);font-size:.85rem;padding:12px 0;text-align:center}
-.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 18px;border-radius:10px;font-size:.85rem;opacity:0;pointer-events:none;transition:opacity .25s;z-index:50}
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow-y:auto;z-index:100}
-.review-box{background:var(--bg);border-radius:14px;max-width:560px;width:100%;padding:18px;margin:auto}
+.empty{color:var(--muted);font-size:.85rem;padding:14px 0;text-align:center}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 18px;border-radius:var(--r-sm);font-size:.85rem;opacity:0;pointer-events:none;transition:opacity .25s;z-index:50;box-shadow:var(--shadow-lift)}
+.overlay{position:fixed;inset:0;background:rgba(10,18,15,.6);display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow-y:auto;z-index:100}
+.review-box{background:var(--bg);border-radius:var(--r-lg);max-width:560px;width:100%;padding:20px;margin:auto;box-shadow:var(--shadow-lift)}
 .review-box h2{margin:0 0 4px}
 .review-section{margin-top:14px;padding-top:10px;border-top:1px solid var(--border)}
-.review-section h3{font-size:.78rem;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);margin:0 0 6px}
+.review-section h3{font-size:.76rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 6px}
 .review-row{display:flex;justify-content:space-between;padding:4px 0;font-size:.9rem;font-variant-numeric:tabular-nums}
 .review-row .k{color:var(--muted)}
-.review-warn{background:color-mix(in srgb, var(--warn) 15%, transparent);color:var(--warn);border-radius:10px;padding:10px 12px;font-size:.85rem;margin-top:12px;font-weight:600}
+.review-warn{background:var(--gold-wash);color:var(--warn);border-radius:var(--r-sm);padding:10px 12px;font-size:.85rem;margin-top:12px;font-weight:600;border:1px solid color-mix(in srgb, var(--warn) 30%, transparent)}
 .toast.show{opacity:1}
-.section-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.section-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
 .login-card{max-width:360px;margin:60px auto;text-align:center}
-.detail-box{background:var(--bg);border:1px dashed var(--border);border-radius:10px;padding:12px;margin-top:10px;font-size:.85rem}
+.detail-box{background:var(--surface-2);border:1px dashed var(--border-strong);border-radius:var(--r-sm);padding:12px;margin-top:10px;font-size:.85rem}
 .detail-box div{padding:3px 0}
-.confirm-wrap{background:var(--bg);border:1px solid var(--warn);border-radius:10px;padding:10px;margin-top:8px;font-size:.8rem}
+.confirm-wrap{background:var(--gold-wash);border:1px solid color-mix(in srgb, var(--warn) 35%, transparent);border-radius:var(--r-sm);padding:10px;margin-top:8px;font-size:.8rem}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.company-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.company-card{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);padding:14px 15px;transition:box-shadow .15s,border-color .15s}
+.company-card:hover{box-shadow:var(--shadow-sm);border-color:var(--border-strong)}
+.company-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:10px}
+.company-card-name{font-weight:700;font-size:.95rem;line-height:1.25}
+.company-card-top .pill{flex-shrink:0}
+.company-card-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;padding:2px 6px;border-radius:var(--r-sm);line-height:1}
+.company-card-del:hover{background:color-mix(in srgb, var(--bad) 12%, transparent);color:var(--bad)}
+.company-card-balance{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:1.3rem;font-weight:700;letter-spacing:-.01em;margin-bottom:10px}
+.company-card-balance .unit{font-family:var(--font-body);font-size:.7rem;font-weight:600;color:var(--muted);margin-left:3px}
+.company-card-balance.good{color:var(--good)}
+.company-card-balance.bad{color:var(--bad)}
+.company-card-stats{display:flex;flex-direction:column;gap:5px;padding-top:10px;border-top:1px solid var(--border)}
+.company-card-stats div{display:flex;justify-content:space-between;font-size:.8rem}
+.company-card-stats .k{color:var(--muted)}
+.company-card-stats .v{font-variant-numeric:tabular-nums;font-weight:600}
+.action-box{background:var(--accent-wash);border:1px solid color-mix(in srgb, var(--accent) 28%, transparent);border-radius:var(--r-md);padding:14px;margin-top:14px}
+.action-box h3{color:var(--accent);margin-bottom:2px}
 </style>
 </head>
 <body>
@@ -503,6 +544,40 @@ function afterRenderTab(){
     document.getElementById('pl_month').addEventListener('change', renderPL);
     renderOverviewCharts();
   }
+  if(activeTab==='expenses'){
+    renderGazForecast();
+    document.getElementById('gf_month').addEventListener('change', renderGazForecast);
+  }
+}
+function renderGazForecast(){
+  const monthEl = document.getElementById('gf_month');
+  const box = document.getElementById('gazForecastBox');
+  if(!monthEl || !box) return;
+  const ym = monthEl.value || nextMonthKey();
+  const f = forecastGazPrepayment(ym);
+  if(f.forecastAmount == null){
+    box.innerHTML = `<div class="empty">Башорат учун камида 1 ой кунлик ҳисобот тарихи керак (ҳали йўқ).</div>`;
+    return;
+  }
+  const s = f.stock;
+  box.innerHTML = `
+    <div class="tile-row" style="margin-top:10px">
+      <div class="tile"><div class="label">Тавсия этилган сумма</div><div class="value">${fmt(f.forecastAmount)} сўм</div></div>
+      <div class="tile"><div class="label">Тавсия этилган ҳажм</div><div class="value">${fmt(f.forecastVolume)} m³</div></div>
+    </div>
+    <p class="hint" style="margin-top:8px">
+      ${f.hasSeasonality
+        ? `Асос: шу йилги ўртача ${fmt(f.avgNow)} m3/ой × мавсумий коэфф. ${f.seasonalIndex.toFixed(2)} (ўтган йил ${f.lastYearYm} ойи, ${fmt(f.lastYearVol)} m3, олдинги 3 ой ўртачаси ${fmt(f.lastYearAvgPrev3)} m3 га нисбатан). Нарх: ${fmt(f.costPrice)} сўм/m3.`
+        : `⚠ Мавсумийлик ҳисобга олинмади (ўтган йил ${f.lastYearYm} учун маълумот йўқ) — фақат шу йилги ўртача ${fmt(f.avgNow)} m3/ой асосида. Нарх: ${fmt(f.costPrice)} сўм/m3.`}
+    </p>
+    <h3 style="margin-top:14px">Заҳира (ФИФО)</h3>
+    <div class="tile-row" style="margin-top:6px">
+      <div class="tile"><div class="label">Жами препейментланган</div><div class="value">${fmt(s.totalVolume)} m³</div></div>
+      <div class="tile"><div class="label">Жами ишлатилган</div><div class="value">${fmt(s.consumedVolume)} m³</div></div>
+      <div class="tile"><div class="label">Қолдиқ (ҳажм)</div><div class="value ${s.remainingVolume<0?'bad':'good'}">${fmt(s.remainingVolume)} m³</div></div>
+      <div class="tile"><div class="label">Қолдиқ (қиймати)</div><div class="value ${s.remainingValue<0?'bad':'good'}">${fmt(s.remainingValue)} сўм</div></div>
+    </div>
+    <p class="hint" style="margin-top:6px">Қолдиқ — ҳар бир препеймент партиясининг ҲАЛИ ИШЛАТИЛМАГАН қисми, ўзининг нархида (ФИФО). Ҳажми (m3) киритилмаган эски партиялар учун тахминий ҳажм ишлатилади.</p>`;
 }
 
 // ============================================================
@@ -802,8 +877,11 @@ function computeMonthlyPL(monthStr){
   const pr = priceFor(monthStr+'-28');
   // Таннарх — таъминотчидан қанча газ СОТИБ ОЛИНГАНИ (Агрес, давлат
   // ҳисоблагичи) асосида — эски расмий ҳисоботдаги каби (пумпадан
-  // сотилган m3 эмас).
-  const cogsGas = agresTotal * pr.cost_price;
+  // сотилган m3 эмас). 2026-10-13дан бошлаб ФИФО орқали (ҳар бир gaz
+  // препейменти ўз нархи билан) — гар ҳажми (volume_m3) киритилмаган
+  // партиялар учун эски (бир хил таннарх) натижа сақланиб қолади.
+  const gazCogsMap = gazFifoCogs();
+  const cogsGas = monthEntries.reduce((s,e)=> s + (gazCogsMap[e.id]||0), 0);
   // Акциз — сотилган (пумпа) m3'дан олинадиган солиқ.
   const excise = soldM3Total * pr.excise;
 
@@ -840,6 +918,139 @@ function computeMonthlyPL(monthStr){
   return { count: monthEntries.length, revenue, cogsGas, electricity, salary, bank, land, otherExp, expensesTotal,
     excise, outputVat, inputVat, ndsNet, socialAmount, profitBeforeTax, tax, profitTaxAmount, netProfit,
     prepayGaz, prepayTok };
+}
+
+// ============================================================
+// ГАЗ ПРЕПЕЙМЕНТ БАШОРАТИ — "YYYY-MM" ойга қанча препеймент тавсия
+// қилинади. Мантиқ (фойдаланувчи билан келишилган, 2026-10-13):
+//   1) Шу йилги охирги 6 ойнинг ўртача Агрес ҳажми — "joriy tezlik".
+//   2) Агар ўтган йилнинг ХУДДИ ШУ ойи ва ундан олдинги 3 ойи мавжуд
+//      бўлса — "mavsumiy koeffitsient" (seasonal index) ҳисобланади:
+//      ўтган йил шу ой ҳажми / ўтган йилги олдинги 3 ой ўртачаси.
+//      Бу рақам қишда авто-паст чиқади (ўтган йил ҳам қишда камайган
+//      бўлгани учун) — "қайси ойлар қишки" деб қўлда белгилаш керак
+//      эмас, тизим буни тарихнинг ўзидан "ўрганади".
+//   3) Якуний ҳажм = joriy tezlik × mavsumiy koeffitsient (агар бор
+//      бўлса), акс ҳолда фақат joriy tezlikнинг ўзи (огоҳлантириш
+//      билан — мавсумийлик ҳисобга олинмаган).
+//   4) Сумма = ҳажм × ҳозирги таннарх (сўм/m3, "Нарх" дан).
+// Эслатма: бу ҲАЖМ-асосли башорат, ФИФО қолдиғини (ҳали қурилмаган)
+// автоматик АЙИРМАЙДИ — шунинг учун пастда алоҳида "жорий баланс"
+// (жами тўланган − жами сарфланган, сум бўйича, тахминий) кўрсатилади.
+// ============================================================
+// ============================================================
+// ГАЗ ФИФО (бензиндаги benzinFifoCogs() нинг газ учун эгизаги):
+// ҲАР БИР gaz препейменти (prepayments, kind='gaz') ўз "партияси" —
+// ўзининь ҳажми (volume_m3) ва нархи (amount/volume_m3) билан.
+// Агар volume_m3 бўш бўлса (эски қаторлар ёки CEO киритмаган) —
+// ҳажм шу ойдаги Созламалар таннархи орқали тахминий ҳисобланади
+// (натижада ЭСКИ хатти-ҳаракат сақланади — фақат ЯНГИ, ҳажми
+// киритилган партиялар ҳақиқий ФИФО нархини беради).
+// Истеъмол — ҳар кунлик ёзувнинг Агрес (давлат ҳисоблагичи) ҳажми
+// бўйича, хронологик тартибда, энг эски партиядан бошлаб.
+// ============================================================
+let GAZ_FIFO_BATCHES = []; // охирги чақирувдан кейинги қолдиқ — "Заҳира" кўрсатиш учун
+function gazFifoCogs(){
+  const batches = state.prepayments.filter(p=>p.kind==='gaz').slice()
+    .sort((a,b)=> a.month < b.month ? -1 : (a.month > b.month ? 1 : 0))
+    .map(p=>{
+      const amount = Number(p.amount)||0;
+      let volume = p.volume_m3!=null ? Number(p.volume_m3) : null;
+      if(volume == null || volume <= 0){
+        const refPrice = priceFor((p.month||'').slice(0,7)+'-28').cost_price || 0;
+        volume = refPrice > 0 ? amount/refPrice : 0;
+      }
+      const costPerM3 = volume > 0 ? amount/volume : 0;
+      return { month: p.month, totalVolume: volume, remaining: volume, costPerM3, estimated: p.volume_m3==null };
+    });
+  const asc = state.entries.slice().sort((a,b)=> a.date < b.date ? -1 : (a.date > b.date ? 1 : 0));
+  const cogsByEntry = {};
+  let lastKnownCost = null;
+  asc.forEach(e=>{
+    let need = Number(e.agres)||0;
+    let cost = 0;
+    for(const b of batches){
+      if(need <= 0) break;
+      if(b.remaining <= 0) continue;
+      const take = Math.min(b.remaining, need);
+      cost += take * b.costPerM3;
+      b.remaining -= take;
+      need -= take;
+      if(b.costPerM3 > 0) lastKnownCost = b.costPerM3;
+    }
+    if(need > 0){
+      const cpl = lastKnownCost != null ? lastKnownCost : priceFor(e.date).cost_price;
+      cost += need * cpl;
+    }
+    cogsByEntry[e.id] = cost;
+  });
+  GAZ_FIFO_BATCHES = batches;
+  return cogsByEntry;
+}
+// "Заҳира" — жами партия ҳажми, жами истеъмол (Агрес), қолдиқ (m3 ва
+// қолган партияларнинг ўз нархида қиймати, сум). gazFifoCogs() ни
+// чақиргандан кейинги GAZ_FIFO_BATCHES қолдиғидан фойдаланади.
+function gazStockSummary(){
+  gazFifoCogs(); // GAZ_FIFO_BATCHES'ни янгилаш учун
+  const totalVolume = GAZ_FIFO_BATCHES.reduce((s,b)=>s+b.totalVolume,0);
+  const remainingVolume = GAZ_FIFO_BATCHES.reduce((s,b)=>s+b.remaining,0);
+  const remainingValue = GAZ_FIFO_BATCHES.reduce((s,b)=>s+b.remaining*b.costPerM3,0);
+  const consumedVolume = totalVolume - remainingVolume;
+  return { totalVolume, consumedVolume, remainingVolume, remainingValue };
+}
+function monthKeyAdd(ym, delta){
+  let [y,m] = ym.split('-').map(Number);
+  m += delta;
+  while(m>12){ m-=12; y++; }
+  while(m<1){ m+=12; y--; }
+  return y+'-'+String(m).padStart(2,'0');
+}
+function nextMonthKey(){ return monthKeyAdd(currentMonthKey(), 1); }
+// Ой бўйича Агрес (давлат ҳисоблагичи) ҳажми — табиий газ харид ҳажми,
+// COGS худди шу асосда ҳисобланади (pumpadan sotilgan m3 emas).
+function metanMonthlyAgres(){
+  const byMonth = {};
+  state.entries.forEach(e=>{
+    if(!e.date) return;
+    const ym = e.date.slice(0,7);
+    byMonth[ym] = (byMonth[ym]||0) + Number(e.agres||0);
+  });
+  return byMonth;
+}
+function forecastGazPrepayment(targetYm){
+  const vol = metanMonthlyAgres();
+  const recentYms = [1,2,3,4,5,6].map(i=>monthKeyAdd(targetYm,-i));
+  const recentVals = recentYms.map(m=>vol[m]).filter(v=>v!==undefined && v>0);
+  const avgNow = recentVals.length ? recentVals.reduce((a,b)=>a+b,0)/recentVals.length : null;
+
+  const lastYearYm = monthKeyAdd(targetYm,-12);
+  const lastYearVol = vol[lastYearYm];
+  const lastYearPrev3 = [1,2,3].map(i=>vol[monthKeyAdd(lastYearYm,-i)]).filter(v=>v!==undefined && v>0);
+  const lastYearAvgPrev3 = lastYearPrev3.length ? lastYearPrev3.reduce((a,b)=>a+b,0)/lastYearPrev3.length : null;
+
+  let seasonalIndex = null, forecastVolume = null, hasSeasonality = false;
+  if(avgNow != null){
+    if(lastYearVol != null && lastYearAvgPrev3 != null && lastYearAvgPrev3 > 0){
+      seasonalIndex = lastYearVol / lastYearAvgPrev3;
+      forecastVolume = avgNow * seasonalIndex;
+      hasSeasonality = true;
+    } else {
+      forecastVolume = avgNow;
+    }
+  }
+  const curPrice = latestByDate(state.prices);
+  const costPrice = curPrice ? Number(curPrice.cost_price||0) : 0;
+  const forecastAmount = forecastVolume != null ? forecastVolume * costPrice : null;
+
+  // Жорий қолдиқ — энди ФИФО орқали ҳисобланади (gazStockSummary):
+  // ҳар бир партиянинг ЎЗ нархида қолган ҳажми йиғиндиси. Ҳажми
+  // киритилмаган эски партиялар учун тахминий ҳажмдан фойдаланилади
+  // (gazFifoCogs() изоҳига қаранг) — шунинг учун баъзи эски ойлар
+  // учун бу рақам ҳамон тахминий бўлиб қолади.
+  const stock = gazStockSummary();
+
+  return { targetYm, avgNow, lastYearYm, lastYearVol, lastYearAvgPrev3, seasonalIndex, hasSeasonality,
+    forecastVolume, costPrice, forecastAmount, estBalance: stock.remainingValue, stock };
 }
 
 function renderPL(){
@@ -1081,8 +1292,8 @@ function startEditEntry(id){
   if(!e) return;
   const dels = state.deliveries.filter(d=>d.entry_id===id);
   const area = document.getElementById('entryEditArea');
-  area.innerHTML = `<div class="card" style="margin-top:8px;background:#fffbe6">
-    <h3>Тузатиш — ${e.date}</h3>
+  area.innerHTML = `<div class="action-box" style="margin-top:8px">
+    <h3 style="color:var(--accent)">✎ Тузатиш — ${e.date}</h3>
     ${ENTRY_EDIT_FIELDS.map(([key,label])=>`<div class="field"><label>${label}</label><input id="ee_${key}" type="${key==='izoh'?'text':'number'}" value="${esc(e[key]==null?'':e[key])}"></div>`).join('')}
     <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:10px">
       <label style="font-weight:700;display:block;margin-bottom:6px">Компанияларга берилган газ</label>
@@ -1303,9 +1514,9 @@ function tplGapLedger(role){
     <div class="tile-row"><div class="tile"><div class="label">Жорий қолдиқ</div><div class="value ${balance<0?'bad':'good'}">${fmt(balance)} сўм</div></div></div>
   </div>
   ${canWrite ? `
-  <div class="card group-settings">
-    <h2>${role==='ceo'?'CEO — ечиб олиш / сарфлаш':'Харажат ёзиш'}</h2>
-    <div class="row">
+  <div class="action-box" style="margin-top:0;margin-bottom:14px">
+    <h3>${role==='ceo'?'+ CEO — ечиб олиш / сарфлаш':'+ Харажат ёзиш'}</h3>
+    <div class="row" style="margin-top:8px">
       <div class="field"><label>Сана</label><input type="date" id="gl_date" value="${todayISO()}"></div>
       <div class="field"><label>Сумма (сўм)</label><input type="number" id="gl_amount" step="1"></div>
       <div class="field" style="flex:2"><label>Изоҳ</label><input type="text" id="gl_note" placeholder="масалан: эҳтиёт қисм учун"></div>
@@ -1388,29 +1599,41 @@ function tplCompanies(role){
   <div class="card group-company">
     <div class="section-title"><h2>Компаниялар баланси</h2></div>
     <p class="hint">Баланс = компания ўтказган пул − унга берилган газ суммаси. Ранг қанча тез боғланиш кераклигини кўрсатади: сариқ — кузатиб туринг, тўқ сариқ — кам қолди, қизил — жуда кам ёки қарздор.</p>
-    <div class="table-wrap">
-      <table><thead><tr><th>Компания</th><th>Сотилган m3</th><th>Сотилган сумма</th><th>Тўланган</th><th>Қолдиқ баланс</th>${canEdit?'<th></th>':''}</tr></thead>
-      <tbody>${totals.map(c=>{
-        const bal = c.paid - c.sold;
-        const tier = balanceTier(bal);
-        return `<tr><td>${esc(c.name)}</td><td>${fmt(c.m3)}</td><td>${fmt(c.sold)}</td><td>${fmt(c.paid)}</td>
-          <td><span class="pill ${tier}" title="${balanceLabel(bal)}">${fmt(bal)}</span></td>
-          ${canEdit?`<td><button class="del" onclick="deleteCompany('${c.id}')" title="Ўчириш">✕</button></td>`:''}</tr>`;
-      }).join('')}</tbody></table>
-    </div>
+    <div class="company-grid">${totals.map(c=>{
+      const bal = c.paid - c.sold;
+      const tier = balanceTier(bal);
+      const balClass = bal < 0 ? 'bad' : 'good';
+      return `<div class="company-card">
+        <div class="company-card-top">
+          <div class="company-card-name">${esc(c.name)}</div>
+          ${canEdit?`<button class="company-card-del" onclick="deleteCompany('${c.id}')" title="Ўчириш">✕</button>`:''}
+        </div>
+        <div class="company-card-balance ${balClass}">${fmt(bal)}<span class="unit">сўм</span></div>
+        <span class="pill ${tier}" title="Ҳолат">${balanceLabel(bal)}</span>
+        <div class="company-card-stats">
+          <div><span class="k">Сотилган ҳажм</span><span class="v">${fmt(c.m3)} m³</span></div>
+          <div><span class="k">Сотилган сумма</span><span class="v">${fmt(c.sold)}</span></div>
+          <div><span class="k">Тўланган</span><span class="v">${fmt(c.paid)}</span></div>
+        </div>
+      </div>`;
+    }).join('') || `<div class="empty">Ҳали компания қўшилмаган</div>`}</div>
   </div>
   ${canEdit ? `
   <div class="card group-income">
     <div class="section-title"><h2>Компания балансига пул қўшиш</h2></div>
-    <p class="hint">Компания ҳисобингизга пул ўтказганда шу ерга киритинг — баланси ошади. Кейин уларга газ берилган сари баланс ўзи камайиб боради (юқоридаги жадвалда автоматик ҳисобланади).</p>
-    <div class="row">
-      <div class="field" style="flex:2"><label>Компания</label><select id="cp_company"></select></div>
-      <div class="field"><label>Сумма (сўм)</label><input type="number" id="cp_amount" step="1"></div>
-      <div class="field"><label>Сана</label><input type="date" id="cp_date" value="${todayISO()}"></div>
-      <div class="field" style="flex:2"><label>Изоҳ (ихтиёрий)</label><input type="text" id="cp_note" placeholder="масалан: наличний, ҳисобдан"></div>
-      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addCompanyPayment()">Қўшиш</button></div>
+    <div class="action-box" style="margin-top:0">
+      <h3>+ Янги тўлов қўшиш</h3>
+      <p class="hint" style="margin-top:4px">Компания ҳисобингизга пул ўтказганда шу ерга киритинг — баланси ошади. Кейин уларга газ берилган сари баланс ўзи камайиб боради (юқоридаги жадвалда автоматик ҳисобланади).</p>
+      <div class="row" style="margin-top:8px">
+        <div class="field" style="flex:2"><label>Компания</label><select id="cp_company"></select></div>
+        <div class="field"><label>Сумма (сўм)</label><input type="number" id="cp_amount" step="1"></div>
+        <div class="field"><label>Сана</label><input type="date" id="cp_date" value="${todayISO()}"></div>
+        <div class="field" style="flex:2"><label>Изоҳ (ихтиёрий)</label><input type="text" id="cp_note" placeholder="масалан: наличний, ҳисобдан"></div>
+        <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addCompanyPayment()">Қўшиш</button></div>
+      </div>
     </div>
-    <div class="table-wrap" style="margin-top:12px">
+    <h3 style="margin-top:12px">Тарих</h3>
+    <div class="table-wrap" style="margin-top:8px">
       <table><thead><tr><th>Сана</th><th>Компания</th><th>Сумма</th><th>Изоҳ</th><th>Ким киритган</th><th></th></tr></thead>
       <tbody>${recentPayments.map(p=>
         `<tr><td>${p.date||''}</td><td>${esc(companyName(p.company_id))}</td><td>${fmt(p.amount)}</td><td>${esc(p.note||'')}</td><td class="hint">${esc(p.created_by_name||'—')}</td>
@@ -1418,9 +1641,10 @@ function tplCompanies(role){
       ).join('') || `<tr><td colspan="6" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
     </div>
   </div>
-  <div class="card group-settings">
-    <h2>Янги компания қўшиш</h2>
-    <div class="row">
+  <div class="card">
+    <div class="action-box" style="margin-top:0">
+    <h3>+ Янги компания қўшиш</h3>
+    <div class="row" style="margin-top:8px">
       <div class="field" style="flex:2"><label>Номи</label><input type="text" id="nc_name"></div>
       <div class="field"><label>Бошланғич m3</label><input type="number" id="nc_m3" value="0"></div>
       <div class="field"><label>Бошланғич сотилган сумма</label><input type="number" id="nc_sold" value="0"></div>
@@ -1433,6 +1657,7 @@ function tplCompanies(role){
       <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addCompany()">Қўшиш</button></div>
     </div>
     <p class="hint">"Фақат бензин" танласангиз, бу компания метандаги рўйхатда кўринмайди (масалан шахсий машина учун бензин олувчи мижозлар учун) — Бензин → Созламалардан ҳам компания қўшиш мумкин.</p>
+    </div>
   </div>` : ''}`;
 }
 function afterRenderCompanies(){
@@ -1503,27 +1728,52 @@ async function deleteCompany(id){
 // ============================================================
 function tplExpenses(role){
   const canEdit = role==='ceo';
+  const curMonth = todayISO().slice(0,7)+'-01';
+  const curGaz = state.prepayments.find(p=>p.month===curMonth && p.kind==='gaz');
+  const curTok = state.prepayments.find(p=>p.month===curMonth && p.kind==='tok');
+  const otherThisMonth = state.otherExpenses.filter(e=>(e.station||'metan')==='metan' && (e.date||'').slice(0,7)===curMonth.slice(0,7))
+    .reduce((s,e)=>s+(e.amount||0),0);
   return `
+  <div class="card group-company">
+    <div class="section-title"><h2>Газ препейменти — тавсия этилган сумма</h2></div>
+    <p class="hint">Ҳисоблаш: шу йилги охирги 6 ойнинг ўртача Агрес ҳажми, ўтган йил ХУДДИ ШУ ойдаги мавсумий ўзгаришга (ўсиш/тушиш) мослаб тузатилган. Қиш ойлари учун алоҳида белгилаш керак эмас — тизим буни ўтган йилнинг ўз рақамларидан аниқлайди.</p>
+    <div class="field" style="max-width:220px"><label>Қайси ой учун</label><input type="month" id="gf_month" value="${nextMonthKey()}"></div>
+    <div id="gazForecastBox"></div>
+  </div>
   <div class="card group-expense">
     <div class="section-title"><h2>Препеймент (Газ / Ток)</h2></div>
-    <div class="table-wrap">
-      <table><thead><tr><th>Ой</th><th>Тури</th><th>Сумма</th><th>Изоҳ</th><th>Ким киритган</th>${canEdit?'<th></th>':''}</tr></thead>
-      <tbody>${state.prepayments.map(p=>
-        `<tr><td>${p.month}</td><td>${p.kind==='gaz'?'Газ':'Ток'}</td><td>${fmt(p.amount)}</td><td>${esc(p.note||'')}</td><td class="hint">${esc(p.created_by_name||'—')}</td>
-          ${canEdit?`<td><button class="del" onclick="deletePrepayment('${p.id}')">✕</button></td>`:''}</tr>`
-      ).join('') || `<tr><td colspan="${canEdit?6:5}" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
+    <div class="tile-row">
+      <div class="tile"><div class="label">Шу ой — Газ</div><div class="value">${curGaz?fmt(curGaz.amount):'—'}</div></div>
+      <div class="tile"><div class="label">Шу ой — Ток</div><div class="value">${curTok?fmt(curTok.amount):'—'}</div></div>
     </div>
-    ${canEdit ? `<div class="row" style="margin-top:10px">
-      <div class="field"><label>Ой</label><input type="month" id="pp_month"></div>
-      <div class="field"><label>Тури</label><select id="pp_kind"><option value="gaz">Газ</option><option value="tok">Ток</option></select></div>
-      <div class="field"><label>Сумма</label><input type="number" id="pp_amount"></div>
-      <div class="field"><label>Изоҳ</label><input type="text" id="pp_note"></div>
-      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addPrepayment()">Қўшиш</button></div>
+    <h3>Тарих</h3>
+    <div class="table-wrap">
+      <table><thead><tr><th>Ой</th><th>Тури</th><th>Сумма</th><th>Ҳажм (m3)</th><th>Изоҳ</th><th>Ким киритган</th>${canEdit?'<th></th>':''}</tr></thead>
+      <tbody>${state.prepayments.map(p=>
+        `<tr><td>${p.month}</td><td>${p.kind==='gaz'?'Газ':'Ток'}</td><td>${fmt(p.amount)}</td><td>${p.kind==='gaz'?(p.volume_m3!=null?fmt(p.volume_m3):'<span class="hint">тахминий</span>'):'—'}</td><td>${esc(p.note||'')}</td><td class="hint">${esc(p.created_by_name||'—')}</td>
+          ${canEdit?`<td><button class="del" onclick="deletePrepayment('${p.id}')">✕</button></td>`:''}</tr>`
+      ).join('') || `<tr><td colspan="${canEdit?7:6}" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
+    </div>
+    ${canEdit ? `<div class="action-box">
+      <h3>+ Янги препеймент қўшиш</h3>
+      <div class="row" style="margin-top:8px">
+        <div class="field"><label>Ой</label><input type="month" id="pp_month"></div>
+        <div class="field"><label>Тури</label><select id="pp_kind" onchange="document.getElementById('pp_volume_wrap').style.display=this.value==='gaz'?'':'none'"><option value="gaz">Газ</option><option value="tok">Ток</option></select></div>
+        <div class="field"><label>Сумма</label><input type="number" id="pp_amount"></div>
+        <div class="field" id="pp_volume_wrap"><label>Ҳажм (m3)</label><input type="number" id="pp_volume" placeholder="масалан 45000"></div>
+        <div class="field"><label>Изоҳ</label><input type="text" id="pp_note"></div>
+        <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addPrepayment()">Қўшиш</button></div>
+      </div>
+      <p class="hint" style="margin-top:6px">Ҳажм (m3) — шу препеймент учун таъминотчи билан келишилган газ ҳажми. Бўш қолдирсангиз ҳам бўлади (ФИФО ҳисоби тахминий давом этади), лекин АНИҲ ҲИСОБ учун киритиб туриш тавсия этилади.</p>
     </div>` : ''}
   </div>
 
   <div class="card group-expense">
     <div class="section-title"><h2>Бошқа харажатлар</h2></div>
+    <div class="tile-row">
+      <div class="tile"><div class="label">Шу ой жами</div><div class="value">${fmt(otherThisMonth)}</div></div>
+    </div>
+    <h3>Тарих</h3>
     <div class="table-wrap">
       <table><thead><tr><th>Сана</th><th>Тавсиф</th><th>Сумма</th><th>Ким киритган</th>${canEdit?'<th></th>':''}</tr></thead>
       <tbody>${state.otherExpenses.filter(e=>(e.station||'metan')==='metan').map(e=>
@@ -1531,20 +1781,27 @@ function tplExpenses(role){
           ${canEdit?`<td><button class="del" onclick="deleteOtherExpense('${e.id}')">✕</button></td>`:''}</tr>`
       ).join('') || `<tr><td colspan="${canEdit?5:4}" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
     </div>
-    ${canEdit ? `<div class="row" style="margin-top:10px">
-      <div class="field"><label>Сана</label><input type="date" id="oe_date_metan" value="${todayISO()}"></div>
-      <div class="field" style="flex:2"><label>Тавсиф</label><input type="text" id="oe_desc_metan"></div>
-      <div class="field"><label>Сумма</label><input type="number" id="oe_amount_metan"></div>
-      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addOtherExpense('metan')">Қўшиш</button></div>
+    ${canEdit ? `<div class="action-box">
+      <h3>+ Янги харажат қўшиш</h3>
+      <div class="row" style="margin-top:8px">
+        <div class="field"><label>Сана</label><input type="date" id="oe_date_metan" value="${todayISO()}"></div>
+        <div class="field" style="flex:2"><label>Тавсиф</label><input type="text" id="oe_desc_metan"></div>
+        <div class="field"><label>Сумма</label><input type="number" id="oe_amount_metan"></div>
+        <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addOtherExpense('metan')">Қўшиш</button></div>
+      </div>
     </div>` : ''}
   </div>`;
 }
 async function addPrepayment(){
   const monthVal = document.getElementById('pp_month').value; // yyyy-mm
   if(!monthVal){ toast("Ойни танланг"); return; }
+  const kind = document.getElementById('pp_kind').value;
+  const volEl = document.getElementById('pp_volume');
+  const volume_m3 = (kind==='gaz' && volEl && volEl.value!=='') ? parseFloat(volEl.value) : null;
   const { error } = await sb.from('prepayments').upsert({
-    month: monthVal+'-01', kind: document.getElementById('pp_kind').value,
+    month: monthVal+'-01', kind,
     amount: parseFloat(document.getElementById('pp_amount').value)||0,
+    volume_m3,
     note: document.getElementById('pp_note').value.trim()||null,
     created_by_name: state.profile.full_name
   }, { onConflict: 'month,kind' });
@@ -1579,17 +1836,36 @@ async function addOtherExpense(station){
 // ============================================================
 // SETTINGS (CEO only) — rarely-changing numbers, deliberate edit flow
 // ============================================================
+// Тарих жадвалидан "ҳозирги амалдаги" (энг сўнгги effective_date) қаторни
+// олади — созламалар картасининг тепасида катта рақам сифатида кўрсатиш учун.
+function latestByDate(rows){
+  if(!rows || !rows.length) return null;
+  return rows.slice().sort((a,b)=> a.effective_date < b.effective_date ? 1 : -1)[0];
+}
 function tplSettings(){
+  const curPrice = latestByDate(state.prices);
+  const curTax = latestByDate(state.taxRates);
+  const curFixed = latestByDate(state.fixedCosts);
   return `
   <div class="card">
     <div class="section-title"><h2>Захира нусха (Excel)</h2></div>
     <p class="hint">Метан станциясига тегишли ҳамма маълумот (кунлик ҳисоботлар, компаниялар, ойликлар, ойлик хулосалар) алоҳида Excel файлга тушади ва компьютерингизга юкланади. Бензинники ундан алоҳида — "Бензин → Ҳисоботлар" бўлимида. Хавфсизлик учун ҳар ойда бир марта олиб, алоҳида жойда (масалан Google Drive) сақлаб қўйишни тавсия қиламиз.</p>
     <button class="btn secondary" onclick="exportMetanExcel()">📥 Метан — Excel'га юклаб олиш</button>
   </div>
+
   <div class="card group-settings">
-    <div class="section-title"><h2>Нарх тарихи (Сотув / Таннарх / Акциз / Йўқотиш коэффициенти)</h2></div>
-    <div class="table-wrap"><table><thead><tr><th>Сана (дан)</th><th>Сотув</th><th>Таннарх</th><th>Акциз</th><th>Йўқотиш коэфф.</th><th>Ким киритган</th></tr></thead>
-      <tbody>${state.prices.map(p=>`<tr><td>${p.effective_date}</td><td>${fmt(p.sale_price)}</td><td>${fmt(p.cost_price)}</td><td>${fmt(p.excise)}</td><td>${p.loss_coefficient}</td><td class="hint">${esc(p.created_by_name||'—')}</td></tr>`).join('')}</tbody></table></div>
+    <div class="section-title"><h2>Нарх (Сотув / Таннарх / Акциз / Йўқотиш коэфф.)</h2></div>
+    ${curPrice ? `<div class="tile-row">
+      <div class="tile"><div class="label">Сотув нархи</div><div class="value">${fmt(curPrice.sale_price)}</div></div>
+      <div class="tile"><div class="label">Таннарх</div><div class="value">${fmt(curPrice.cost_price)}</div></div>
+      <div class="tile"><div class="label">Акциз</div><div class="value">${fmt(curPrice.excise)}</div></div>
+      <div class="tile"><div class="label">Йўқотиш коэфф.</div><div class="value">${curPrice.loss_coefficient}</div></div>
+    </div><p class="hint">Амалда ${curPrice.effective_date} дан бери.</p>` : `<div class="empty">Ҳали нарх киритилмаган</div>`}
+    <details style="margin-top:10px">
+      <summary style="cursor:pointer;color:var(--muted);font-size:.8rem;font-weight:600">Тўлиқ тарихни кўрсатиш (${state.prices.length})</summary>
+      <div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>Сана (дан)</th><th>Сотув</th><th>Таннарх</th><th>Акциз</th><th>Йўқотиш коэфф.</th><th>Ким киритган</th></tr></thead>
+        <tbody>${state.prices.map(p=>`<tr><td>${p.effective_date}</td><td>${fmt(p.sale_price)}</td><td>${fmt(p.cost_price)}</td><td>${fmt(p.excise)}</td><td>${p.loss_coefficient}</td><td class="hint">${esc(p.created_by_name||'—')}</td></tr>`).join('')}</tbody></table></div>
+    </details>
     <div class="confirm-wrap">
       <p class="hint">⚠️ Бу узоқ муддат ўзгармайдиган рақам. Фақат нарх ҳақиқатан ҳам ўзгарган кунда янги қатор қўшинг — эски кунлар эски нархда ҳисобланаверади. Йўқотиш коэффициенти — "Давлат ҳисоботи"да Агрес кўрсаткичини давлат ҳисобига мослаштириш учун ишлатилади (эски тизимда доим 0.986 бўлган).</p>
       <div class="row">
@@ -1605,9 +1881,17 @@ function tplSettings(){
   </div>
 
   <div class="card group-tax">
-    <div class="section-title"><h2>Солиқ ставкалари тарихи</h2></div>
-    <div class="table-wrap"><table><thead><tr><th>Сана (дан)</th><th>НДС</th><th>Ижтимоий</th><th>Фойда</th><th>Ким киритган</th></tr></thead>
-      <tbody>${state.taxRates.map(t=>`<tr><td>${t.effective_date}</td><td>${pct(t.nds_rate)}</td><td>${pct(t.social_tax_rate)}</td><td>${pct(t.profit_tax_rate)}</td><td class="hint">${esc(t.created_by_name||'—')}</td></tr>`).join('')}</tbody></table></div>
+    <div class="section-title"><h2>Солиқ ставкалари</h2></div>
+    ${curTax ? `<div class="tile-row">
+      <div class="tile"><div class="label">НДС</div><div class="value">${pct(curTax.nds_rate)}</div></div>
+      <div class="tile"><div class="label">Ижтимоий</div><div class="value">${pct(curTax.social_tax_rate)}</div></div>
+      <div class="tile"><div class="label">Фойда</div><div class="value">${pct(curTax.profit_tax_rate)}</div></div>
+    </div><p class="hint">Амалда ${curTax.effective_date} дан бери.</p>` : `<div class="empty">Ҳали ставка киритилмаган</div>`}
+    <details style="margin-top:10px">
+      <summary style="cursor:pointer;color:var(--muted);font-size:.8rem;font-weight:600">Тўлиқ тарихни кўрсатиш (${state.taxRates.length})</summary>
+      <div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>Сана (дан)</th><th>НДС</th><th>Ижтимоий</th><th>Фойда</th><th>Ким киритган</th></tr></thead>
+        <tbody>${state.taxRates.map(t=>`<tr><td>${t.effective_date}</td><td>${pct(t.nds_rate)}</td><td>${pct(t.social_tax_rate)}</td><td>${pct(t.profit_tax_rate)}</td><td class="hint">${esc(t.created_by_name||'—')}</td></tr>`).join('')}</tbody></table></div>
+    </details>
     <div class="confirm-wrap">
       <div class="row">
         <div class="field"><label>Амал қилиш санаси</label><input type="date" id="tx_date"></div>
@@ -1621,10 +1905,19 @@ function tplSettings(){
   </div>
 
   <div class="card group-settings">
-    <div class="section-title"><h2>Доимий харажатлар (Иш ҳақи / Банк кредити / Ер-мулк солиғи / Электр)</h2></div>
+    <div class="section-title"><h2>Доимий харажатлар (Иш ҳақи / Банк кредити / Ер-мулк / Электр)</h2></div>
+    ${curFixed ? `<div class="tile-row">
+      <div class="tile"><div class="label">Иш ҳақи</div><div class="value">${fmt(curFixed.salary)}</div></div>
+      <div class="tile"><div class="label">Банк кредити</div><div class="value">${fmt(curFixed.bank_loan_interest)}</div></div>
+      <div class="tile"><div class="label">Ер-мулк</div><div class="value">${fmt(curFixed.land_property_tax)}</div></div>
+      <div class="tile"><div class="label">Электр (ойлик)</div><div class="value">${fmt(curFixed.electricity_tariff)}</div></div>
+    </div><p class="hint">Амалда ${curFixed.effective_date} дан бери.</p>` : `<div class="empty">Ҳали киритилмаган</div>`}
     <p class="hint">Электр — шу ойнинг ЖАМИ электр харажати (сўмда), тарифи эмас. Ҳар ой электр ҳисоби келгач, шу ерга шу ойнинг умумий суммасини янги қатор қилиб қўшинг — акс ҳолда "Ойлик даромад ҳисоботи"да электр харажати 0 (ёки эскирган) кўринади.</p>
-    <div class="table-wrap"><table><thead><tr><th>Сана (дан)</th><th>Иш ҳақи</th><th>Банк кредити</th><th>Ер-мулк</th><th>Электр (ойлик, жами)</th><th>Ким киритган</th></tr></thead>
-      <tbody>${state.fixedCosts.map(f=>`<tr><td>${f.effective_date}</td><td>${fmt(f.salary)}</td><td>${fmt(f.bank_loan_interest)}</td><td>${fmt(f.land_property_tax)}</td><td>${fmt(f.electricity_tariff)}</td><td class="hint">${esc(f.created_by_name||'—')}</td></tr>`).join('')}</tbody></table></div>
+    <details style="margin-top:4px">
+      <summary style="cursor:pointer;color:var(--muted);font-size:.8rem;font-weight:600">Тўлиқ тарихни кўрсатиш (${state.fixedCosts.length})</summary>
+      <div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>Сана (дан)</th><th>Иш ҳақи</th><th>Банк кредити</th><th>Ер-мулк</th><th>Электр (ойлик, жами)</th><th>Ким киритган</th></tr></thead>
+        <tbody>${state.fixedCosts.map(f=>`<tr><td>${f.effective_date}</td><td>${fmt(f.salary)}</td><td>${fmt(f.bank_loan_interest)}</td><td>${fmt(f.land_property_tax)}</td><td>${fmt(f.electricity_tariff)}</td><td class="hint">${esc(f.created_by_name||'—')}</td></tr>`).join('')}</tbody></table></div>
+    </details>
     <div class="confirm-wrap">
       <div class="row">
         <div class="field"><label>Амал қилиш санаси</label><input type="date" id="fc_date"></div>
@@ -1957,14 +2250,24 @@ function renderBenzinPL(){
 function tplBenzinExpenses(role){
   const canEdit = role==='ceo';
   const bzFixedCosts = state.fixedCosts.filter(f=>(f.station||'metan')==='benzin');
+  const curElec = latestByDate(bzFixedCosts);
+  const curMonth = todayISO().slice(0,7);
+  const otherThisMonth = state.otherExpenses.filter(e=>(e.station||'metan')==='benzin' && (e.date||'').slice(0,7)===curMonth)
+    .reduce((s,e)=>s+(e.amount||0),0);
   return `
   <div class="card group-settings">
     <div class="section-title"><h2>Электр энергияси (ойлик, жами)</h2></div>
-    <p class="hint">Ҳар ой электр ҳисоби келгач, шу ойнинг умумий суммасини (сўмда) шу ерга янги қатор қилиб қўшинг.</p>
-    <div class="table-wrap"><table><thead><tr><th>Сана (дан)</th><th>Электр (ойлик, жами)</th><th>Ким киритган</th></tr></thead>
-      <tbody>${bzFixedCosts.map(f=>`<tr><td>${f.effective_date}</td><td>${fmt(f.electricity_tariff)}</td><td class="hint">${esc(f.created_by_name||'—')}</td></tr>`).join('') || `<tr><td colspan="3" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table></div>
-    ${canEdit ? `<div class="confirm-wrap">
-      <div class="row">
+    ${curElec ? `<div class="tile-row"><div class="tile"><div class="label">Ҳозирги ойлик</div><div class="value">${fmt(curElec.electricity_tariff)}</div></div></div>
+    <p class="hint">Амалда ${curElec.effective_date} дан бери.</p>` : `<div class="empty">Ҳали киритилмаган</div>`}
+    <details style="margin-top:6px">
+      <summary style="cursor:pointer;color:var(--muted);font-size:.8rem;font-weight:600">Тўлиқ тарихни кўрсатиш (${bzFixedCosts.length})</summary>
+      <div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>Сана (дан)</th><th>Электр (ойлик, жами)</th><th>Ким киритган</th></tr></thead>
+        <tbody>${bzFixedCosts.map(f=>`<tr><td>${f.effective_date}</td><td>${fmt(f.electricity_tariff)}</td><td class="hint">${esc(f.created_by_name||'—')}</td></tr>`).join('') || `<tr><td colspan="3" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table></div>
+    </details>
+    ${canEdit ? `<div class="action-box">
+      <h3>+ Янги қиймат қўшиш</h3>
+      <p class="hint" style="margin-top:4px">Ҳар ой электр ҳисоби келгач, шу ойнинг умумий суммасини (сўмда) шу ерга янги қатор қилиб қўшинг.</p>
+      <div class="row" style="margin-top:8px">
         <div class="field"><label>Амал қилиш санаси</label><input type="date" id="bfc_date" value="${todayISO()}"></div>
         <div class="field"><label>Электр (ойлик, жами сўм)</label><input type="number" id="bfc_elec"></div>
       </div>
@@ -1975,6 +2278,8 @@ function tplBenzinExpenses(role){
 
   <div class="card group-expense">
     <div class="section-title"><h2>Бошқа харажатлар</h2></div>
+    <div class="tile-row"><div class="tile"><div class="label">Шу ой жами</div><div class="value">${fmt(otherThisMonth)}</div></div></div>
+    <h3>Тарих</h3>
     <div class="table-wrap">
       <table><thead><tr><th>Сана</th><th>Тавсиф</th><th>Сумма</th><th>Ким киритган</th>${canEdit?'<th></th>':''}</tr></thead>
       <tbody>${state.otherExpenses.filter(e=>(e.station||'metan')==='benzin').map(e=>
@@ -1982,11 +2287,14 @@ function tplBenzinExpenses(role){
           ${canEdit?`<td><button class="del" onclick="deleteOtherExpense('${e.id}')">✕</button></td>`:''}</tr>`
       ).join('') || `<tr><td colspan="${canEdit?5:4}" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
     </div>
-    ${canEdit ? `<div class="row" style="margin-top:10px">
-      <div class="field"><label>Сана</label><input type="date" id="oe_date_benzin" value="${todayISO()}"></div>
-      <div class="field" style="flex:2"><label>Тавсиф</label><input type="text" id="oe_desc_benzin"></div>
-      <div class="field"><label>Сумма</label><input type="number" id="oe_amount_benzin"></div>
-      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addOtherExpense('benzin')">Қўшиш</button></div>
+    ${canEdit ? `<div class="action-box">
+      <h3>+ Янги харажат қўшиш</h3>
+      <div class="row" style="margin-top:8px">
+        <div class="field"><label>Сана</label><input type="date" id="oe_date_benzin" value="${todayISO()}"></div>
+        <div class="field" style="flex:2"><label>Тавсиф</label><input type="text" id="oe_desc_benzin"></div>
+        <div class="field"><label>Сумма</label><input type="number" id="oe_amount_benzin"></div>
+        <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addOtherExpense('benzin')">Қўшиш</button></div>
+      </div>
     </div>` : ''}
   </div>
 
@@ -2116,18 +2424,21 @@ function tplBenzinSettings(){
   <div class="card group-settings">
     <div class="section-title"><h2>Бензин созламалари</h2></div>
     <p class="hint">Янги ёқилғи тури, нарх ва калонкаларга қайси марка бириктирилганини шу ерда бошқарасиз.</p>
-    <div class="row">
-      <div class="field"><label>Янги ёқилғи тури</label><input type="text" id="ft_name" placeholder="масалан АИ-95"></div>
-      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addFuelType()">Қўшиш</button></div>
+    <div class="action-box">
+      <h3>+ Ёқилғи тури / нарх қўшиш</h3>
+      <div class="row" style="margin-top:8px">
+        <div class="field"><label>Янги ёқилғи тури</label><input type="text" id="ft_name" placeholder="масалан АИ-95"></div>
+        <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addFuelType()">Қўшиш</button></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div class="field"><label>Нарх — қайси турга</label><select id="fp_fuel">${state.fuelTypes.map(f=>`<option value="${f.id}">${esc(f.name)}</option>`).join('')}</select></div>
+        <div class="field"><label>Амал қилиш санаси</label><input type="date" id="fp_date"></div>
+        <div class="field"><label>Сотув нархи (сўм/л)</label><input type="number" id="fp_price"></div>
+        <div class="field"><label>Акциз (сўм/л)</label><input type="number" id="fp_excise" placeholder="ҳозирча номаълум бўлса 0"></div>
+        <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addFuelPrice()">Нарх қўшиш</button></div>
+      </div>
+      <p class="hint" style="margin-top:6px">⚠ Акциз ставкасини аниқ билмасангиз, 0 қолдиринг ва бухгалтер билан аниқлаштиргандан кейин киритинг — 0 турганда Бензин ҳисоб-китобида акциз чиқармайди (кам кўрсатилган фойда/солиқ хавфи бор!). Таннарх бу ерда қўлда киритилмайди — у "Бензин қабул қилиш" формасидаги ҳар бир накладнойнинг ҳақиқий суммасидан (ФИФО тартибида) автоматик ҳисобланади.</p>
     </div>
-    <div class="row" style="margin-top:10px">
-      <div class="field"><label>Нарх — қайси турга</label><select id="fp_fuel">${state.fuelTypes.map(f=>`<option value="${f.id}">${esc(f.name)}</option>`).join('')}</select></div>
-      <div class="field"><label>Амал қилиш санаси</label><input type="date" id="fp_date"></div>
-      <div class="field"><label>Сотув нархи (сўм/л)</label><input type="number" id="fp_price"></div>
-      <div class="field"><label>Акциз (сўм/л)</label><input type="number" id="fp_excise" placeholder="ҳозирча номаълум бўлса 0"></div>
-      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addFuelPrice()">Нарх қўшиш</button></div>
-    </div>
-    <p class="hint">⚠ Акциз ставкасини аниқ билмасангиз, 0 қолдиринг ва бухгалтер билан аниқлаштиргандан кейин киритинг — 0 турганда Бензин ҳисоб-китобида акциз чиқармайди (кам кўрсатилган фойда/солиқ хавфи бор!). Таннарх бу ерда қўлда киритилмайди — у "Бензин қабул қилиш" формасидаги ҳар бир накладнойнинг ҳақиқий суммасидан (ФИФО тартибида) автоматик ҳисобланади.</p>
     <div class="table-wrap" style="margin-top:10px"><table><thead><tr><th>Тур</th><th>Сана</th><th>Сотув</th><th>Акциз</th></tr></thead>
       <tbody>${state.fuelPrices.map(p=>`<tr><td>${fuelTypeName(p.fuel_type_id)}</td><td>${p.effective_date}</td><td>${fmt(p.sale_price)}</td><td>${fmt(p.excise)}</td></tr>`).join('') || '<tr><td colspan="4" class="empty">Ҳали киритилмаган</td></tr>'}</tbody></table></div>
     <h3 style="margin-top:16px">Солиқ ставкалари (НДС, ижтимоий, фойда солиғи)</h3>
@@ -2148,13 +2459,16 @@ function tplBenzinSettings(){
     <p class="hint">Фақат "Фаол" калонкалар кунлик ҳисобот формасида кўринади. Ишламаётган калонкани "Фаол эмас" қилиб қўйсангиз, оператор формасида ҳар куни унга 0 киритиш шарт бўлмай қолади. Янги маҳсулот (масалан бошқа турдаги ёқилғи) сотила бошласа, пастдан янги калонка қўшинг.</p>
     <div class="table-wrap"><table><thead><tr><th>Калонка</th><th>Ёқилғи тури</th><th>Ҳолат</th></tr></thead>
       <tbody>${state.dispensers.map(d=>`<tr><td>${esc(d.name)}</td><td><select onchange="setDispenserFuel('${d.id}', this.value)">${state.fuelTypes.map(f=>`<option value="${f.id}" ${f.id===d.fuel_type_id?'selected':''}>${esc(f.name)}</option>`).join('')}</select></td><td><button class="btn secondary small" onclick="toggleDispenserActive('${d.id}', ${!d.active})">${d.active?'✓ Фаол (ўчириш)':'Фаол эмас (ёқиш)'}</button></td></tr>`).join('')}</tbody></table></div>
-    <div class="row" style="margin-top:10px">
-      <div class="field" style="flex:2"><label>Янги калонка номи</label><input type="text" id="disp_name" placeholder="масалан: 2-калонка / А"></div>
-      <div class="field"><label>Ёқилғи тури</label><select id="disp_fuel">${state.fuelTypes.map(f=>`<option value="${f.id}">${esc(f.name)}</option>`).join('')}</select></div>
-      <div class="field"><label>Бошланғич кўрсаткич (ихтиёрий)</label><input type="number" step="0.01" id="disp_seed" placeholder="агар калонкада ҳозир рақам бор бўлса"></div>
-      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addDispenser()">Қўшиш</button></div>
+    <div class="action-box">
+      <h3>+ Янги калонка қўшиш</h3>
+      <div class="row" style="margin-top:8px">
+        <div class="field" style="flex:2"><label>Янги калонка номи</label><input type="text" id="disp_name" placeholder="масалан: 2-калонка / А"></div>
+        <div class="field"><label>Ёқилғи тури</label><select id="disp_fuel">${state.fuelTypes.map(f=>`<option value="${f.id}">${esc(f.name)}</option>`).join('')}</select></div>
+        <div class="field"><label>Бошланғич кўрсаткич (ихтиёрий)</label><input type="number" step="0.01" id="disp_seed" placeholder="агар калонкада ҳозир рақам бор бўлса"></div>
+        <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addDispenser()">Қўшиш</button></div>
+      </div>
+      <p class="hint" style="margin-top:6px">⚠ Агар бу калонка аввалдан бор бўлиб, ҳозир рақами 0 ЭМАС бўлса, "Бошланғич кўрсаткич"ни МАЖБУРИЙ тўлдиринг — акс ҳолда биринчи кун "сотилган" ўрнига ҳозирги кўрсаткичнинг ЎЗИ (масалан 1,928,932) катта рақам сифатида ёзилиб кетади (метанда бўлган хатонинг айнан ўзи).</p>
     </div>
-    <p class="hint">⚠ Агар бу калонка аввалдан бор бўлиб, ҳозир рақами 0 ЭМАС бўлса, "Бошланғич кўрсаткич"ни МАЖБУРИЙ тўлдиринг — акс ҳолда биринчи кун "сотилган" ўрнига ҳозирги кўрсаткичнинг ЎЗИ (масалан 1,928,932) катта рақам сифатида ёзилиб кетади (метанда бўлган хатонинг айнан ўзи).</p>
     <h3 style="margin-top:16px">Зичлик (тонна→литр учун, ихтиёрий)</h3>
     <p class="hint">Агар ТТН'да фақат тонна кўрсатилса, қабул қилишда шу зичлик орқали литрга авто-ҳисобланади. Аниқ билмасангиз бўш қолдиринг — литрни қўлда киритаверасиз.</p>
     <div class="table-wrap"><table><thead><tr><th>Тур</th><th>Зичлик (кг/л)</th></tr></thead>
@@ -2165,9 +2479,12 @@ function tplBenzinSettings(){
     <p class="hint">Бу ерда қўшилган компания фақат бензин рўйхатларида кўринади (метандаги "Компаниялар" бўлимида чиқмайди) — масалан шахсий машина учун бензин олувчи мижозлар шу ерга қўшилади.</p>
     <div class="table-wrap"><table><thead><tr><th>Номи</th></tr></thead>
       <tbody>${companiesForStation('benzin').slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<tr><td>${esc(c.name)}</td></tr>`).join('') || '<tr><td class="empty">Ҳали қўшилмаган</td></tr>'}</tbody></table></div>
-    <div class="row" style="margin-top:10px">
-      <div class="field" style="flex:2"><label>Янги мижоз номи</label><input type="text" id="bzc_name" placeholder="масалан: Дадам (машина 611)"></div>
-      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addBenzinCompany()">Қўшиш</button></div>
+    <div class="action-box">
+      <h3>+ Янги мижоз қўшиш</h3>
+      <div class="row" style="margin-top:8px">
+        <div class="field" style="flex:2"><label>Янги мижоз номи</label><input type="text" id="bzc_name" placeholder="масалан: Дадам (машина 611)"></div>
+        <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addBenzinCompany()">Қўшиш</button></div>
+      </div>
     </div>
   </div>`;
 }
