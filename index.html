@@ -4,31 +4,41 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Мангит Метан</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0B2F5B">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mangit Metan">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600&display=swap">
 <style>
 :root{
-  /* "Ўлчагич" (gauge/dial) палитаси — газ алангаси каби тўқ петрол-кўк асос,
-     ёнилғи ҳисоблагич латунь акценти билан. Умумий "SaaS кўк" ўрнига. */
-  --bg:#EEF2F0; --surface:#FFFFFF; --surface-2:#F5F8F6; --border:#D8E2DE; --border-strong:#C3D1CB;
-  --fg:#152420; --muted:#5C6E68;
-  --accent:#0E6B5C; --accent-hover:#0B5A4E; --accent-wash:#0E6B5C14; --accent-fg:#FFFFFF;
-  --gold:#B9842F; --gold-wash:#B9842F16;
+  /* FILOP бренд палитаси — асосий (тўқ кўк), аксент (ёрқин кўк),
+     олтин ва оқ. "Уч устун. Битта том. Битта ишонч." */
+  --bg:#F2F5FA; --surface:#FFFFFF; --surface-2:#EAEFF7; --border:#DCE3EE; --border-strong:#C3CEDE;
+  --fg:#15233D; --muted:#5F6B82;
+  --accent:#1E88FF; --accent-hover:#1468C4; --accent-wash:#1E88FF14; --accent-fg:#FFFFFF;
+  --navy:#0B2F5B; --navy-wash:#0B2F5B12;
+  --gold:#F6B93B; --gold-wash:#F6B93B1F;
   --good:#157A42; --bad:#B3321B; --warn:#AD7510; --orange:#C05F0C;
-  --blue:#345F86; --purple:#6A4C9C;
+  --blue:#1E88FF; --purple:#6A4C9C;
   --font-display:'Inter',system-ui,-apple-system,sans-serif; --font-body:'Inter',system-ui,-apple-system,sans-serif; --font-mono:'JetBrains Mono',ui-monospace,monospace;
-  --shadow-sm:0 1px 2px rgba(14,28,22,.07), 0 1px 1px rgba(14,28,22,.04);
-  --shadow-md:0 6px 16px rgba(14,28,22,.10), 0 2px 4px rgba(14,28,22,.06);
-  --shadow-lift:0 10px 24px rgba(14,28,22,.14), 0 2px 6px rgba(14,28,22,.08);
+  --shadow-sm:0 1px 2px rgba(11,47,91,.08), 0 1px 1px rgba(11,47,91,.05);
+  --shadow-md:0 6px 16px rgba(11,47,91,.11), 0 2px 4px rgba(11,47,91,.06);
+  --shadow-lift:0 10px 24px rgba(11,47,91,.16), 0 2px 6px rgba(11,47,91,.08);
   --r-lg:16px; --r-md:11px; --r-sm:8px;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#0C1512; --surface:#152420; --surface-2:#1A2B26; --border:#263C35; --border-strong:#32504A;
-    --fg:#E9F2EF; --muted:#8FA6A0;
-    --accent:#28BC97; --accent-hover:#3ECFAA; --accent-wash:#28BC971F; --accent-fg:#06211B;
-    --gold:#E3A64B; --gold-wash:#E3A64B22;
+    --bg:#0A1626; --surface:#11213A; --surface-2:#16283F; --border:#223756; --border-strong:#2E4870;
+    --fg:#ECF1F8; --muted:#93A0B8;
+    --accent:#4DA3FF; --accent-hover:#6FB5FF; --accent-wash:#4DA3FF22; --accent-fg:#06142A;
+    --navy:#0B2F5B; --navy-wash:#0B2F5B40;
+    --gold:#F8C563; --gold-wash:#F8C56326;
     --good:#34D399; --bad:#F2795A; --warn:#E8B548; --orange:#F0914A;
-    --blue:#6FA8D8; --purple:#B79AE0;
+    --blue:#4DA3FF; --purple:#B79AE0;
     --shadow-sm:0 1px 2px rgba(0,0,0,.35);
     --shadow-md:0 6px 16px rgba(0,0,0,.40);
     --shadow-lift:0 10px 26px rgba(0,0,0,.48);
@@ -245,6 +255,7 @@ function toLoginEmail(input){
 function renderLogin(){
   document.getElementById('app').innerHTML = `
     <div class="card login-card">
+      <div style="display:flex;justify-content:center;margin-bottom:14px">${filopMarkSvg(56)}</div>
       <h1>Мангит Метан</h1>
       <p class="sub">Кунлик ҳисобот ва бошқарув тизими</p>
       <div class="field" style="text-align:left"><label>Логин</label><input type="text" id="loginEmail" autocapitalize="off" autocomplete="username"></div>
@@ -444,6 +455,19 @@ function tabIconSvg(id){
   if(!p) return '';
   return `<svg class="tab-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
 }
+// FILOP бренд белгиси — "уч устун, битта том" (қурилиш пештоқидаги
+// учта устун ва ягона томнинг рамзи — "Уч ustun. Bitta tom. Bitta ishonch.").
+// Доимо шу тўрт рангда чизилади (тема эмас, брендга қатъий боғлиқ).
+function filopMarkSvg(px){
+  px = px || 40;
+  return `<svg width="${px}" height="${px}" viewBox="0 0 64 64" style="flex-shrink:0" aria-hidden="true">
+    <rect width="64" height="64" rx="14" fill="#0B2F5B"/>
+    <rect x="16" y="19" width="32" height="7" rx="3.5" fill="#FFFFFF"/>
+    <rect x="17" y="27" width="8" height="22" rx="3" fill="#F6B93B"/>
+    <rect x="28" y="27" width="8" height="22" rx="3" fill="#F6B93B"/>
+    <rect x="39" y="27" width="8" height="22" rx="3" fill="#F6B93B"/>
+  </svg>`;
+}
 
 // currentStation === null -> ҳали танланмаган (фақат profile.station==='both'
 // бўлганларда рўй беради) -> танлов экрани кўрсатилади.
@@ -456,7 +480,10 @@ function renderShell(){
   const stationLabel = currentStation==='metan' ? 'Метан' : (currentStation==='benzin' ? 'Бензин' : 'Умумий ҳолат');
   document.getElementById('app').innerHTML = `
     <div class="topbar">
-      <div><h1 style="margin-bottom:0">Мангит Метан — ${stationLabel}</h1><p class="who">${esc(state.profile.full_name)} — ${roleLabel(role)}</p></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        ${filopMarkSvg(34)}
+        <div><h1 style="margin-bottom:0">Мангит Метан — ${stationLabel}</h1><p class="who">${esc(state.profile.full_name)} — ${roleLabel(role)}</p></div>
+      </div>
       <div style="display:flex;gap:8px">
         ${canSwitch ? `<button class="btn secondary small" onclick="switchStation()">🔁 Станция</button>` : ''}
         <button class="btn secondary small" onclick="doLogout()">Чиқиш</button>
@@ -475,7 +502,10 @@ function renderStationPicker(){
   const showUmumiy = (role === 'direktor' || role === 'ceo');
   document.getElementById('app').innerHTML = `
     <div class="topbar">
-      <div><h1 style="margin-bottom:0">Мангит Метан</h1><p class="who">${esc(state.profile.full_name)} — ${roleLabel(role)}</p></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        ${filopMarkSvg(34)}
+        <div><h1 style="margin-bottom:0">Мангит Метан</h1><p class="who">${esc(state.profile.full_name)} — ${roleLabel(role)}</p></div>
+      </div>
       <button class="btn secondary small" onclick="doLogout()">Чиқиш</button>
     </div>
     <div class="card" style="text-align:center;padding:28px 16px">
@@ -1822,7 +1852,7 @@ function gapBalance(){
   return credit - debit;
 }
 function tplGapLedger(role){
-  const canWrite = role==='operator' || role==='ceo';
+  const canWrite = role==='operator' || role==='ceo' || role==='direktor';
   const canDelete = role==='ceo';
   const balance = gapBalance();
   // Иккала манбани (кунлик фарқ + ечиб олинганлар) бир хронологик
@@ -1912,7 +1942,9 @@ function lowBalanceCardHtml(){
 
 function tplCompanies(role){
   const totals = companyTotals('metan').sort((a,b)=>a.name.localeCompare(b.name));
-  const canEdit = role==='ceo';
+  const canManage = role==='ceo';
+  const canPay = role==='ceo' || role==='direktor';
+  const canDeletePay = role==='ceo';
   const recentPayments = state.payments
     .filter(p=>!p.entry_id)
     .slice().sort((a,b)=> new Date(b.created_at) - new Date(a.created_at))
@@ -1930,7 +1962,7 @@ function tplCompanies(role){
       return `<div class="company-card">
         <div class="company-card-top">
           <div class="company-card-name">${esc(c.name)}</div>
-          ${canEdit?`<button class="company-card-del" onclick="deleteCompany('${c.id}')" title="Ўчириш">✕</button>`:''}
+          ${canManage?`<button class="company-card-del" onclick="deleteCompany('${c.id}')" title="Ўчириш">✕</button>`:''}
         </div>
         <div class="company-card-balance ${balClass}">${fmt(bal)}<span class="unit">сўм</span></div>
         <span class="pill ${tier}" title="Ҳолат">${balanceLabel(bal)}</span>
@@ -1942,7 +1974,7 @@ function tplCompanies(role){
       </div>`;
     }).join('') || `<div class="empty">Ҳали компания қўшилмаган</div>`}</div>
   </div>
-  ${canEdit ? `
+  ${canPay ? `
   <div class="card group-income">
     <div class="section-title"><h2>Компания балансига пул қўшиш</h2></div>
     <div class="action-box" style="margin-top:0">
@@ -1961,10 +1993,11 @@ function tplCompanies(role){
       <table><thead><tr><th>Сана</th><th>Компания</th><th>Сумма</th><th>Изоҳ</th><th>Ким киритган</th><th></th></tr></thead>
       <tbody>${recentPayments.map(p=>
         `<tr><td>${p.date||''}</td><td>${esc(companyName(p.company_id))}</td><td>${fmt(p.amount)}</td><td>${esc(p.note||'')}</td><td class="hint">${esc(p.created_by_name||'—')}</td>
-          <td><button class="del" onclick="deleteCompanyPayment('${p.id}')" title="Ўчириш">✕</button></td></tr>`
+          <td>${canDeletePay?`<button class="del" onclick="deleteCompanyPayment('${p.id}')" title="Ўчириш">✕</button>`:''}</td></tr>`
       ).join('') || `<tr><td colspan="6" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
     </div>
-  </div>
+  </div>` : ''}
+  ${canManage ? `
   <div class="card">
     <div class="action-box" style="margin-top:0">
     <h3>+ Янги компания қўшиш</h3>
@@ -2051,7 +2084,8 @@ async function deleteCompany(id){
 // EXPENSES — prepayments + other expenses (grouped, CEO edits)
 // ============================================================
 function tplExpenses(role){
-  const canEdit = role==='ceo';
+  const canEnter = role==='ceo' || role==='direktor';
+  const canDelete = role==='ceo';
   const curMonth = todayISO().slice(0,7)+'-01';
   const curGaz = state.prepayments.find(p=>p.month===curMonth && p.kind==='gaz');
   const curTok = state.prepayments.find(p=>p.month===curMonth && p.kind==='tok');
@@ -2072,13 +2106,13 @@ function tplExpenses(role){
     </div>
     <h3>Тарих</h3>
     <div class="table-wrap">
-      <table><thead><tr><th>Ой</th><th>Тури</th><th>Сумма</th><th>Ҳажм (m3)</th><th>Изоҳ</th><th>Ким киритган</th>${canEdit?'<th></th>':''}</tr></thead>
+      <table><thead><tr><th>Ой</th><th>Тури</th><th>Сумма</th><th>Ҳажм (m3)</th><th>Изоҳ</th><th>Ким киритган</th>${canDelete?'<th></th>':''}</tr></thead>
       <tbody>${state.prepayments.map(p=>
         `<tr><td>${p.month}</td><td>${p.kind==='gaz'?'Газ':'Ток'}</td><td>${fmt(p.amount)}</td><td>${p.kind==='gaz'?(p.volume_m3!=null?fmt(p.volume_m3):'<span class="hint">тахминий</span>'):'—'}</td><td>${esc(p.note||'')}</td><td class="hint">${esc(p.created_by_name||'—')}</td>
-          ${canEdit?`<td><button class="del" onclick="deletePrepayment('${p.id}')">✕</button></td>`:''}</tr>`
-      ).join('') || `<tr><td colspan="${canEdit?7:6}" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
+          ${canDelete?`<td><button class="del" onclick="deletePrepayment('${p.id}')">✕</button></td>`:''}</tr>`
+      ).join('') || `<tr><td colspan="${canDelete?7:6}" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
     </div>
-    ${canEdit ? `<div class="action-box">
+    ${canEnter ? `<div class="action-box">
       <h3>+ Янги препеймент қўшиш</h3>
       <div class="row" style="margin-top:8px">
         <div class="field"><label>Ой</label><input type="month" id="pp_month"></div>
@@ -2099,13 +2133,13 @@ function tplExpenses(role){
     </div>
     <h3>Тарих</h3>
     <div class="table-wrap">
-      <table><thead><tr><th>Сана</th><th>Тавсиф</th><th>Сумма</th><th>Ким киритган</th>${canEdit?'<th></th>':''}</tr></thead>
+      <table><thead><tr><th>Сана</th><th>Тавсиф</th><th>Сумма</th><th>Ким киритган</th>${canDelete?'<th></th>':''}</tr></thead>
       <tbody>${state.otherExpenses.filter(e=>(e.station||'metan')==='metan').map(e=>
         `<tr><td>${e.date}</td><td>${esc(e.description)}</td><td>${fmt(e.amount)}</td><td class="hint">${esc(e.created_by_name||'—')}</td>
-          ${canEdit?`<td><button class="del" onclick="deleteOtherExpense('${e.id}')">✕</button></td>`:''}</tr>`
-      ).join('') || `<tr><td colspan="${canEdit?5:4}" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
+          ${canDelete?`<td><button class="del" onclick="deleteOtherExpense('${e.id}')">✕</button></td>`:''}</tr>`
+      ).join('') || `<tr><td colspan="${canDelete?5:4}" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
     </div>
-    ${canEdit ? `<div class="action-box">
+    ${canEnter ? `<div class="action-box">
       <h3>+ Янги харажат қўшиш</h3>
       <div class="row" style="margin-top:8px">
         <div class="field"><label>Сана</label><input type="date" id="oe_date_metan" value="${todayISO()}"></div>
@@ -2572,7 +2606,9 @@ function renderBenzinPL(){
 // (Ойликлар/Ойлик иш ҳақи ўз алоҳида табида — "Ойликлар".)
 // ============================================================
 function tplBenzinExpenses(role){
-  const canEdit = role==='ceo';
+  const canEditElec = role==='ceo';
+  const canEnter = role==='ceo' || role==='direktor';
+  const canDelete = role==='ceo';
   const bzFixedCosts = state.fixedCosts.filter(f=>(f.station||'metan')==='benzin');
   const curElec = latestByDate(bzFixedCosts);
   const curMonth = todayISO().slice(0,7);
@@ -2588,7 +2624,7 @@ function tplBenzinExpenses(role){
       <div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>Сана (дан)</th><th>Электр (ойлик, жами)</th><th>Ким киритган</th></tr></thead>
         <tbody>${bzFixedCosts.map(f=>`<tr><td>${f.effective_date}</td><td>${fmt(f.electricity_tariff)}</td><td class="hint">${esc(f.created_by_name||'—')}</td></tr>`).join('') || `<tr><td colspan="3" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table></div>
     </details>
-    ${canEdit ? `<div class="action-box">
+    ${canEditElec ? `<div class="action-box">
       <h3>+ Янги қиймат қўшиш</h3>
       <p class="hint" style="margin-top:4px">Ҳар ой электр ҳисоби келгач, шу ойнинг умумий суммасини (сўмда) шу ерга янги қатор қилиб қўшинг.</p>
       <div class="row" style="margin-top:8px">
@@ -2605,13 +2641,13 @@ function tplBenzinExpenses(role){
     <div class="tile-row"><div class="tile"><div class="label">Шу ой жами</div><div class="value">${fmt(otherThisMonth)}</div></div></div>
     <h3>Тарих</h3>
     <div class="table-wrap">
-      <table><thead><tr><th>Сана</th><th>Тавсиф</th><th>Сумма</th><th>Ким киритган</th>${canEdit?'<th></th>':''}</tr></thead>
+      <table><thead><tr><th>Сана</th><th>Тавсиф</th><th>Сумма</th><th>Ким киритган</th>${canDelete?'<th></th>':''}</tr></thead>
       <tbody>${state.otherExpenses.filter(e=>(e.station||'metan')==='benzin').map(e=>
         `<tr><td>${e.date}</td><td>${esc(e.description)}</td><td>${fmt(e.amount)}</td><td class="hint">${esc(e.created_by_name||'—')}</td>
-          ${canEdit?`<td><button class="del" onclick="deleteOtherExpense('${e.id}')">✕</button></td>`:''}</tr>`
-      ).join('') || `<tr><td colspan="${canEdit?5:4}" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
+          ${canDelete?`<td><button class="del" onclick="deleteOtherExpense('${e.id}')">✕</button></td>`:''}</tr>`
+      ).join('') || `<tr><td colspan="${canDelete?5:4}" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
     </div>
-    ${canEdit ? `<div class="action-box">
+    ${canEnter ? `<div class="action-box">
       <h3>+ Янги харажат қўшиш</h3>
       <div class="row" style="margin-top:8px">
         <div class="field"><label>Сана</label><input type="date" id="oe_date_benzin" value="${todayISO()}"></div>
@@ -3542,6 +3578,15 @@ function exportMonthlyPLExcel(monthStr){
 }
 
 boot();
+
+// PWA — "Бош экранга қўшиш" (телефонга иловадек ўрнатиш) имконини
+// берадиган service worker. Агар рўйхатдан ўтказиб бўлмаса (эски
+// браузер ёки file:// орқали очилган бўлса), сайт ўзгаришсиз ишлайверади.
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
 </script>
 </body>
 </html>
