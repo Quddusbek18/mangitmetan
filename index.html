@@ -142,6 +142,44 @@ tbody tr:hover td{background:var(--surface-2)}
 .company-card-stats .v{font-variant-numeric:tabular-nums;font-weight:600}
 .action-box{background:var(--accent-wash);border:1px solid color-mix(in srgb, var(--accent) 28%, transparent);border-radius:var(--r-md);padding:14px;margin-top:14px}
 .action-box h3{color:var(--accent);margin-bottom:2px}
+
+/* Таппланадиган карточка — ўзининг устига босиб ичига кирилади (select
+   билан танлаш ўрнига). Телефонда кенг тегиш майдони учун катта padding. */
+.company-card.tappable{cursor:pointer;-webkit-tap-highlight-color:transparent}
+.company-card.tappable:active{transform:scale(.98);box-shadow:none}
+
+/* Қатор-карточка — рўйхат элементи, устига босиш билан деталь очилади
+   (ходимлар ва шу каби "рўйхат + таҳрир" экранлар учун). */
+.list-card{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);padding:13px 14px;margin-bottom:8px;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:box-shadow .15s,border-color .15s;font-family:inherit;color:inherit}
+.list-card:hover{box-shadow:var(--shadow-sm);border-color:var(--border-strong)}
+.list-card:active{transform:scale(.98)}
+.list-card-main{flex:1;min-width:0}
+.list-card-name{font-weight:700;font-size:.92rem;line-height:1.3}
+.list-card-meta{color:var(--muted);font-size:.78rem;margin-top:2px}
+.list-card-side{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.list-card-value{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:.9rem;text-align:right;white-space:nowrap}
+.list-card-chevron{color:var(--muted);font-size:1.1rem;line-height:1}
+.add-fab{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:999px;border:none;background:var(--accent);color:var(--accent-fg);font-weight:700;font-size:.85rem;cursor:pointer;box-shadow:var(--shadow-sm)}
+.add-fab:hover{background:var(--accent-hover)}
+.section-title{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+
+/* Пастдан чиқадиган "sheet" — мобилда қаторнинг/карточканинг ичига
+   "кириш"ни ҳис қилдирадиган модал. Телефонда тўлиқ пастдан, катта
+   экранда марказда дialog сифатида очилади. */
+.sheet-backdrop{position:fixed;inset:0;background:rgba(10,20,35,.5);z-index:70;opacity:0;visibility:hidden;transition:opacity .22s}
+.sheet-backdrop.open{opacity:1;visibility:visible}
+.sheet{position:fixed;left:0;right:0;bottom:0;max-height:88vh;background:var(--surface);border-radius:20px 20px 0 0;box-shadow:var(--shadow-lift);z-index:71;overflow-y:auto;padding:10px 18px 24px;transform:translateY(102%);transition:transform .28s cubic-bezier(.3,.9,.4,1);-webkit-overflow-scrolling:touch}
+.sheet.open{transform:translateY(0)}
+.sheet-handle{width:36px;height:4px;border-radius:999px;background:var(--border-strong);margin:4px auto 10px}
+.sheet-close{position:absolute;top:12px;right:14px;background:none;border:none;color:var(--muted);font-size:1.05rem;cursor:pointer;padding:6px;line-height:1;border-radius:999px}
+.sheet-close:hover{background:var(--surface-2);color:var(--fg)}
+.sheet-body{padding-top:4px}
+@media (min-width:720px){
+  .sheet{left:50%;right:auto;bottom:auto;top:50%;width:480px;max-height:82vh;border-radius:var(--r-lg);transform:translate(-50%,-46%) scale(.98);opacity:0;transition:transform .2s,opacity .2s}
+  .sheet.open{transform:translate(-50%,-50%) scale(1);opacity:1}
+  .sheet-handle{display:none}
+}
+body.sheet-lock{overflow:hidden}
 </style>
 </head>
 <body>
@@ -205,6 +243,46 @@ const todayISO = () => new Date().toISOString().slice(0,10);
 const monthISO = (d) => d.slice(0,7)+'-01';
 const toast = (msg) => { const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2400); };
 const esc = s => (s??'').toString().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// ============================================================
+// SHEET (bottom-sheet модал) — карточка/қатор устига босганда
+// "ичига кириб" таҳрирлаш ҳисси берадиган умумий компонент.
+// Мобилда пастдан тўлиқ чиқади, катта экранда марказда dialog.
+// ============================================================
+function openSheet(innerHtml, opts){
+  opts = opts || {};
+  let backdrop = document.getElementById('sheetBackdrop');
+  let sheet = document.getElementById('sheetPanel');
+  if(!backdrop){
+    backdrop = document.createElement('div');
+    backdrop.id = 'sheetBackdrop';
+    backdrop.className = 'sheet-backdrop';
+    backdrop.onclick = closeSheet;
+    document.body.appendChild(backdrop);
+  }
+  if(!sheet){
+    sheet = document.createElement('div');
+    sheet.id = 'sheetPanel';
+    sheet.className = 'sheet';
+    sheet.setAttribute('role','dialog');
+    document.body.appendChild(sheet);
+  }
+  sheet.innerHTML = `<div class="sheet-handle"></div><button class="sheet-close" onclick="closeSheet()" title="Ёпиш" aria-label="Ёпиш">✕</button><div class="sheet-body">${innerHtml}</div>`;
+  document.body.classList.add('sheet-lock');
+  requestAnimationFrame(()=>{
+    backdrop.classList.add('open');
+    sheet.classList.add('open');
+  });
+  if(opts.afterOpen) opts.afterOpen();
+}
+function closeSheet(){
+  const backdrop = document.getElementById('sheetBackdrop');
+  const sheet = document.getElementById('sheetPanel');
+  if(backdrop) backdrop.classList.remove('open');
+  if(sheet) sheet.classList.remove('open');
+  document.body.classList.remove('sheet-lock');
+}
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeSheet(); });
 
 // ============================================================
 // AUTH
@@ -1944,25 +2022,26 @@ function tplCompanies(role){
   const totals = companyTotals('metan').sort((a,b)=>a.name.localeCompare(b.name));
   const canManage = role==='ceo';
   const canPay = role==='ceo' || role==='direktor';
-  const canDeletePay = role==='ceo';
   const recentPayments = state.payments
     .filter(p=>!p.entry_id)
     .slice().sort((a,b)=> new Date(b.created_at) - new Date(a.created_at))
-    .slice(0,15);
+    .slice(0,8);
   const companyName = id => (state.companies.find(c=>c.id===id)||{}).name || '—';
 
   return `
   <div class="card group-company">
-    <div class="section-title"><h2>Компаниялар баланси</h2></div>
-    <p class="hint">Баланс = компания ўтказган пул − унга берилган газ суммаси. Ранг қанча тез боғланиш кераклигини кўрсатади: сариқ — кузатиб туринг, тўқ сариқ — кам қолди, қизил — жуда кам ёки қарздор.</p>
+    <div class="section-title">
+      <h2>Компаниялар баланси</h2>
+      ${canManage?`<button class="add-fab" onclick="openNewCompanySheet()">+ Янги компания</button>`:''}
+    </div>
+    <p class="hint">Баланс = компания ўтказган пул − унга берилган газ суммаси. ${canPay?'Тўлов қўшиш ёки тарихни кўриш учун компания устига босинг.':'Ранг қанча тез боғланиш кераклигини кўрсатади.'}</p>
     <div class="company-grid">${totals.map(c=>{
       const bal = c.paid - c.sold;
       const tier = balanceTier(bal);
       const balClass = bal < 0 ? 'bad' : 'good';
-      return `<div class="company-card">
+      return `<div class="company-card${canPay?' tappable':''}" ${canPay?`onclick="openCompanyDetail('${c.id}')" role="button" tabindex="0"`:''}>
         <div class="company-card-top">
           <div class="company-card-name">${esc(c.name)}</div>
-          ${canManage?`<button class="company-card-del" onclick="deleteCompany('${c.id}')" title="Ўчириш">✕</button>`:''}
         </div>
         <div class="company-card-balance ${balClass}">${fmt(bal)}<span class="unit">сўм</span></div>
         <span class="pill ${tier}" title="Ҳолат">${balanceLabel(bal)}</span>
@@ -1974,68 +2053,89 @@ function tplCompanies(role){
       </div>`;
     }).join('') || `<div class="empty">Ҳали компания қўшилмаган</div>`}</div>
   </div>
-  ${canPay ? `
-  <div class="card group-income">
-    <div class="section-title"><h2>Компания балансига пул қўшиш</h2></div>
-    <div class="action-box" style="margin-top:0">
-      <h3>+ Янги тўлов қўшиш</h3>
-      <p class="hint" style="margin-top:4px">Компания ҳисобингизга пул ўтказганда шу ерга киритинг — баланси ошади. Кейин уларга газ берилган сари баланс ўзи камайиб боради (юқоридаги жадвалда автоматик ҳисобланади).</p>
-      <div class="row" style="margin-top:8px">
-        <div class="field" style="flex:2"><label>Компания</label><select id="cp_company"></select></div>
-        <div class="field"><label>Сумма (сўм)</label><input type="number" id="cp_amount" step="1"></div>
-        <div class="field"><label>Сана</label><input type="date" id="cp_date" value="${todayISO()}"></div>
-        <div class="field" style="flex:2"><label>Изоҳ (ихтиёрий)</label><input type="text" id="cp_note" placeholder="масалан: наличний, ҳисобдан"></div>
-        <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addCompanyPayment()">Қўшиш</button></div>
-      </div>
-    </div>
-    <h3 style="margin-top:12px">Тарих</h3>
-    <div class="table-wrap" style="margin-top:8px">
-      <table><thead><tr><th>Сана</th><th>Компания</th><th>Сумма</th><th>Изоҳ</th><th>Ким киритган</th><th></th></tr></thead>
-      <tbody>${recentPayments.map(p=>
-        `<tr><td>${p.date||''}</td><td>${esc(companyName(p.company_id))}</td><td>${fmt(p.amount)}</td><td>${esc(p.note||'')}</td><td class="hint">${esc(p.created_by_name||'—')}</td>
-          <td>${canDeletePay?`<button class="del" onclick="deleteCompanyPayment('${p.id}')" title="Ўчириш">✕</button>`:''}</td></tr>`
-      ).join('') || `<tr><td colspan="6" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
-    </div>
-  </div>` : ''}
-  ${canManage ? `
   <div class="card">
-    <div class="action-box" style="margin-top:0">
-    <h3>+ Янги компания қўшиш</h3>
-    <div class="row" style="margin-top:8px">
-      <div class="field" style="flex:2"><label>Номи</label><input type="text" id="nc_name"></div>
+    <div class="section-title"><h2>Сўнгги тўловлар</h2></div>
+    <p class="hint">Барча компаниялар бўйича умумий тарих — тўлов қўшиш учун юқоридаги компания устига босинг.</p>
+    <div class="table-wrap" style="margin-top:8px">
+      <table><thead><tr><th>Сана</th><th>Компания</th><th>Сумма</th><th>Изоҳ</th><th>Ким киритган</th></tr></thead>
+      <tbody>${recentPayments.map(p=>
+        `<tr><td>${p.date||''}</td><td>${esc(companyName(p.company_id))}</td><td>${fmt(p.amount)}</td><td>${esc(p.note||'')}</td><td class="hint">${esc(p.created_by_name||'—')}</td></tr>`
+      ).join('') || `<tr><td colspan="5" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
+    </div>
+  </div>`;
+}
+function afterRenderCompanies(){ /* select энди керак эмас — тўлов компания карточкаси ичидан киритилади */ }
+function openNewCompanySheet(){
+  openSheet(`
+    <h2 style="margin-bottom:10px">Янги компания қўшиш</h2>
+    <div class="field"><label>Номи</label><input type="text" id="nc_name"></div>
+    <div class="row">
       <div class="field"><label>Бошланғич m3</label><input type="number" id="nc_m3" value="0"></div>
       <div class="field"><label>Бошланғич сотилган сумма</label><input type="number" id="nc_sold" value="0"></div>
-      <div class="field"><label>Бошланғич тўланган</label><input type="number" id="nc_paid" value="0"></div>
-      <div class="field"><label>Қайси станция мижози</label><select id="nc_station">
-        <option value="both">Иккаласи ҳам (метан ва бензин)</option>
-        <option value="metan" selected>Фақат метан</option>
-        <option value="benzin">Фақат бензин</option>
-      </select></div>
-      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addCompany()">Қўшиш</button></div>
     </div>
-    <p class="hint">"Фақат бензин" танласангиз, бу компания метандаги рўйхатда кўринмайди (масалан шахсий машина учун бензин олувчи мижозлар учун) — Бензин → Созламалардан ҳам компания қўшиш мумкин.</p>
+    <div class="field"><label>Бошланғич тўланган</label><input type="number" id="nc_paid" value="0"></div>
+    <div class="field"><label>Қайси станция мижози</label><select id="nc_station">
+      <option value="both">Иккаласи ҳам (метан ва бензин)</option>
+      <option value="metan" selected>Фақат метан</option>
+      <option value="benzin">Фақат бензин</option>
+    </select></div>
+    <p class="hint">"Фақат бензин" танласангиз, бу компания метандаги рўйхатда кўринмайди — Бензин → Созламалардан ҳам компания қўшиш мумкин.</p>
+    <button class="btn" style="width:100%;margin-top:6px" onclick="addCompany()">Қўшиш</button>
+  `);
+}
+function openCompanyDetail(id){
+  const role = state.profile.role;
+  const canPay = role==='ceo' || role==='direktor';
+  const canDeletePay = role==='ceo';
+  const canManage = role==='ceo';
+  const c = companyTotals('metan').find(x=>x.id===id);
+  if(!c) return;
+  const bal = c.paid - c.sold;
+  const balClass = bal < 0 ? 'bad' : 'good';
+  const tier = balanceTier(bal);
+  const payments = state.payments.filter(p=>p.company_id===id && !p.entry_id)
+    .slice().sort((a,b)=> new Date(b.created_at) - new Date(a.created_at)).slice(0,25);
+  openSheet(`
+    <h2 style="margin-bottom:2px">${esc(c.name)}</h2>
+    <div class="company-card-balance ${balClass}" style="margin:8px 0 6px">${fmt(bal)}<span class="unit">сўм</span></div>
+    <span class="pill ${tier}">${balanceLabel(bal)}</span>
+    <div class="company-card-stats" style="margin-top:14px">
+      <div><span class="k">Сотилган ҳажм</span><span class="v">${fmt(c.m3)} m³</span></div>
+      <div><span class="k">Сотилган сумма</span><span class="v">${fmt(c.sold)}</span></div>
+      <div><span class="k">Тўланган</span><span class="v">${fmt(c.paid)}</span></div>
     </div>
-  </div>` : ''}`;
+    ${canPay?`
+    <div class="action-box">
+      <h3>+ Тўлов қўшиш</h3>
+      <p class="hint" style="margin-top:4px">Компания ҳисобингизга пул ўтказганда шу ерга киритинг — баланси ошади.</p>
+      <div class="row" style="margin-top:8px">
+        <div class="field"><label>Сумма (сўм)</label><input type="number" id="cpd_amount" step="1"></div>
+        <div class="field"><label>Сана</label><input type="date" id="cpd_date" value="${todayISO()}"></div>
+      </div>
+      <div class="field"><label>Изоҳ (ихтиёрий)</label><input type="text" id="cpd_note" placeholder="масалан: наличний, ҳисобдан"></div>
+      <button class="btn" style="width:100%;margin-top:4px" onclick="addCompanyPaymentFor('${id}')">Қўшиш</button>
+    </div>` : ''}
+    <h3 style="margin-top:18px">Тарих</h3>
+    <div class="table-wrap" style="margin-top:8px">
+      <table><thead><tr><th>Сана</th><th>Сумма</th><th>Изоҳ</th><th>Ким</th>${canDeletePay?'<th></th>':''}</tr></thead>
+      <tbody>${payments.map(p=>`<tr><td>${p.date||''}</td><td>${fmt(p.amount)}</td><td>${esc(p.note||'')}</td><td class="hint">${esc(p.created_by_name||'—')}</td>
+        ${canDeletePay?`<td><button class="del" onclick="deleteCompanyPayment('${p.id}')" title="Ўчириш">✕</button></td>`:''}</tr>`).join('') || `<tr><td colspan="${canDeletePay?5:4}" class="empty">Ҳали тўлов йўқ</td></tr>`}</tbody></table>
+    </div>
+    ${canManage?`<button class="btn danger small" style="width:100%;margin-top:18px" onclick="deleteCompany('${id}')">Компанияни ўчириш</button>`:''}
+  `);
 }
-function afterRenderCompanies(){
-  const sel = document.getElementById('cp_company');
-  if(sel){
-    sel.innerHTML = companiesForStation('metan').slice().sort((a,b)=>a.name.localeCompare(b.name))
-      .map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
-  }
-}
-async function addCompanyPayment(){
-  const companyId = document.getElementById('cp_company').value;
-  const amount = parseFloat(document.getElementById('cp_amount').value);
-  const date = document.getElementById('cp_date').value || todayISO();
-  if(!companyId || !amount){ toast("Компания ва суммани киритинг"); return; }
+async function addCompanyPaymentFor(companyId){
+  const amount = parseFloat(document.getElementById('cpd_amount').value);
+  const date = document.getElementById('cpd_date').value || todayISO();
+  if(!amount){ toast("Суммани киритинг"); return; }
   const { error } = await sb.from('payments').insert({
     company_id: companyId, amount, date,
-    note: document.getElementById('cp_note').value.trim() || null,
+    note: document.getElementById('cpd_note').value.trim() || null,
     created_by_name: state.profile.full_name
   });
   if(error){ toast("Хатолик: "+error.message); return; }
   toast("Баланс янгиланди ✓");
+  closeSheet();
   await loadAll(); renderTab();
 }
 async function deleteCompanyPayment(id){
@@ -2043,6 +2143,7 @@ async function deleteCompanyPayment(id){
   const { error } = await sb.from('payments').delete().eq('id', id);
   if(error){ toast("Хатолик: "+error.message); return; }
   toast("Ўчирилди ✓");
+  closeSheet();
   await loadAll(); renderTab();
 }
 async function addCompany(){
@@ -2059,6 +2160,7 @@ async function addCompany(){
   });
   if(error){ toast("Хатолик: "+error.message); return; }
   toast("Компания қўшилди ✓");
+  closeSheet();
   await loadAll(); renderTab();
 }
 async function addBenzinCompany(){
@@ -2077,6 +2179,7 @@ async function deleteCompany(id){
   const { error } = await sb.from('companies').delete().eq('id', id);
   if(error){ toast("Хатолик: "+error.message+" (аввал унга боғлиқ ёзувларни ўчиринг)"); return; }
   toast("Ўчирилди ✓");
+  closeSheet();
   await loadAll(); renderTab();
 }
 
@@ -3302,39 +3405,80 @@ function tplSalaries(role, station){
   });
   return `
   <div class="card">
-    <div class="section-title"><h2>Ходимлар ва ойликлари</h2></div>
-    <p class="hint">Жорий ойлик = шу ходимнинг энг сўнгги амал қилаётган ставкаси. Ойлик даромад ҳисоботидаги "Иш ҳақи" харажати шу ердаги барча фаол ходимлар ойлигининг йиғиндисидан олинади.</p>
-    <div class="table-wrap"><table><thead><tr><th>Исм</th><th>Лавозим</th><th>Жорий ойлиги</th><th>Ҳолат</th>${canEdit?'<th></th>':''}</tr></thead>
-      <tbody>${rows.map(r=>`<tr><td>${esc(r.emp.full_name)}</td><td>${esc(r.emp.position||'')}</td><td>${r.current?fmt(r.current.amount):'<span class="hint">белгиланмаган</span>'}</td>
-        <td>${r.emp.active?'Фаол':'Фаол эмас'}</td>
-        ${canEdit?`<td><button class="del" onclick="deleteEmployee('${r.emp.id}')" title="Ўчириш">✕</button></td>`:''}</tr>`).join('') || `<tr><td colspan="${canEdit?5:4}" class="empty">Ҳали ходим киритилмаган</td></tr>`}</tbody></table>
+    <div class="section-title">
+      <h2>Ходимлар ва ойликлари</h2>
+      ${canEdit?`<button class="add-fab" onclick="openNewEmployeeSheet('${station}')">+ Янги ходим</button>`:''}
     </div>
+    <p class="hint">Жорий ойлик = шу ходимнинг энг сўнгги амал қилаётган ставкаси. ${canEdit?'Ойлигини ўзгартириш, тарихни кўриш ёки ўчириш учун ходим устига босинг.':''}</p>
+    <div>${rows.map(r=>`
+      <div class="list-card"${canEdit?` onclick="openEmployeeDetail('${r.emp.id}','${station}')" role="button" tabindex="0"`:''}>
+        <div class="list-card-main">
+          <div class="list-card-name">${esc(r.emp.full_name)}</div>
+          <div class="list-card-meta">${esc(r.emp.position||'—')} · ${r.emp.active?'Фаол':'Фаол эмас'}</div>
+        </div>
+        <div class="list-card-side">
+          <div class="list-card-value">${r.current?fmt(r.current.amount):'<span class="hint">белгиланмаган</span>'}</div>
+          ${canEdit?'<span class="list-card-chevron">›</span>':''}
+        </div>
+      </div>`).join('') || `<div class="empty">Ҳали ходим киритилмаган</div>`}</div>
     <div class="tile-row" style="margin-top:10px"><div class="tile"><div class="label">Жорий ой (${monthStr}) — жами иш ҳақи</div><div class="value">${fmt(totalSalaryFor(monthStr, station))}</div></div></div>
-  </div>
-  ${!canEdit ? '' : `
-  <div class="card group-settings">
-    <h2>Янги ходим қўшиш</h2>
-    <div class="row">
-      <div class="field" style="flex:2"><label>Исм-фамилия</label><input type="text" id="emp_name"></div>
-      <div class="field"><label>Лавозим</label><input type="text" id="emp_position" placeholder="Оператор / Ҳайдовчи..."></div>
-      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addEmployee('${station}')">Қўшиш</button></div>
-    </div>
-  </div>
-  <div class="card group-settings">
-    <h2>Ойлик белгилаш / ўзгартириш</h2>
-    <p class="hint">Янги қатор қўшсангиз, шу санадан бошлаб амал қилади — эски ойлар эски ставкада қолаверади. Бирортасининг ойлиги ошса, шу ерга фақат ЯНГИ қатор қўшинг — эски ойлар ҳисоби ўзгармайди, тизимга ҳеч қандай муаммо туғдирмайди.</p>
-    <div class="row">
-      <div class="field" style="flex:2"><label>Ходим</label><select id="sal_employee_${station}"></select></div>
-      <div class="field"><label>Амал қилиш санаси</label><input type="date" id="sal_date_${station}" value="${todayISO()}"></div>
-      <div class="field"><label>Ойлик суммаси</label><input type="number" id="sal_amount_${station}"></div>
-      <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addEmployeeSalary('${station}')">Сақлаш</button></div>
-    </div>
-  </div>`}`;
+  </div>`;
 }
-function afterRenderSalaries(station){
+function afterRenderSalaries(station){ /* энди select йўқ — ходим карточкасидан очилади */ }
+function openNewEmployeeSheet(station){
   station = station || 'metan';
-  const sel = document.getElementById('sal_employee_'+station);
-  if(sel) sel.innerHTML = employeesForStation(station).filter(e=>e.active).map(e=>`<option value="${e.id}">${esc(e.full_name)}</option>`).join('');
+  openSheet(`
+    <h2 style="margin-bottom:10px">Янги ходим қўшиш</h2>
+    <div class="field"><label>Исм-фамилия</label><input type="text" id="emp_name"></div>
+    <div class="field"><label>Лавозим</label><input type="text" id="emp_position" placeholder="Оператор / Ҳайдовчи..."></div>
+    <button class="btn" style="width:100%;margin-top:6px" onclick="addEmployee('${station}')">Қўшиш</button>
+  `);
+}
+function openEmployeeDetail(id, station){
+  station = station || 'metan';
+  const emp = state.employees.find(e=>e.id===id);
+  if(!emp) return;
+  const salaries = state.employeeSalaries.filter(s=>s.employee_id===id).sort((a,b)=>b.effective_date.localeCompare(a.effective_date));
+  openSheet(`
+    <h2 style="margin-bottom:2px">${esc(emp.full_name)}</h2>
+    <p class="hint" style="margin:0 0 10px">${esc(emp.position||'—')}</p>
+    <span class="pill ${emp.active?'good':'bad'}">${emp.active?'Фаол':'Фаол эмас'}</span>
+    <button class="btn secondary small" style="margin-left:8px" onclick="toggleEmployeeActive('${id}', ${!emp.active})">${emp.active?'Фаол эмас қилиш':'Фаол қилиш'}</button>
+    <div class="action-box">
+      <h3>+ Ойлик белгилаш / ўзгартириш</h3>
+      <p class="hint" style="margin-top:4px">Янги қатор қўшсангиз, шу санадан бошлаб амал қилади — эски ойлар эски ставкада қолаверади.</p>
+      <div class="row" style="margin-top:8px">
+        <div class="field"><label>Амал қилиш санаси</label><input type="date" id="sal_date_detail" value="${todayISO()}"></div>
+        <div class="field"><label>Ойлик суммаси</label><input type="number" id="sal_amount_detail"></div>
+      </div>
+      <button class="btn" style="width:100%;margin-top:4px" onclick="addEmployeeSalaryFor('${id}')">Сақлаш</button>
+    </div>
+    <h3 style="margin-top:18px">Ойлик тарихи</h3>
+    <div class="table-wrap" style="margin-top:8px">
+      <table><thead><tr><th>Амал қилган сана</th><th>Сумма</th></tr></thead>
+      <tbody>${salaries.map(s=>`<tr><td>${s.effective_date}</td><td>${fmt(s.amount)}</td></tr>`).join('') || `<tr><td colspan="2" class="empty">Ҳали белгиланмаган</td></tr>`}</tbody></table>
+    </div>
+    <button class="btn danger small" style="width:100%;margin-top:18px" onclick="deleteEmployee('${id}')">Ходимни ўчириш</button>
+  `);
+}
+async function toggleEmployeeActive(id, active){
+  const { error } = await sb.from('employees').update({ active }).eq('id', id);
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast(active?"Фаол қилинди ✓":"Фаол эмас қилинди ✓");
+  closeSheet();
+  await loadAll(); renderTab();
+}
+async function addEmployeeSalaryFor(employeeId){
+  const date = document.getElementById('sal_date_detail').value;
+  const amount = parseFloat(document.getElementById('sal_amount_detail').value);
+  if(!date || !amount){ toast("Сана ва суммани киритинг"); return; }
+  const { error } = await sb.from('employee_salaries').upsert({
+    employee_id: employeeId, effective_date: date, amount, created_by_name: state.profile.full_name
+  }, {onConflict:'employee_id,effective_date'});
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Сақланди ✓");
+  closeSheet();
+  await loadAll(); renderTab();
 }
 async function addEmployee(station){
   station = station || 'metan';
@@ -3345,25 +3489,17 @@ async function addEmployee(station){
     station, created_by_name: state.profile.full_name
   });
   if(error){ toast("Хатолик: "+error.message); return; }
-  toast("Қўшилди ✓"); await loadAll(); renderTab();
+  toast("Қўшилди ✓");
+  closeSheet();
+  await loadAll(); renderTab();
 }
 async function deleteEmployee(id){
   if(!confirm("Бу ходимни ўчирасизми? (тарихи ҳам ўчади)")) return;
   const { error } = await sb.from('employees').delete().eq('id', id);
   if(error){ toast("Хатолик: "+error.message); return; }
-  toast("Ўчирилди ✓"); await loadAll(); renderTab();
-}
-async function addEmployeeSalary(station){
-  station = station || 'metan';
-  const employeeId = document.getElementById('sal_employee_'+station).value;
-  const date = document.getElementById('sal_date_'+station).value;
-  const amount = parseFloat(document.getElementById('sal_amount_'+station).value);
-  if(!employeeId || !date || !amount){ toast("Ходим, сана ва суммани киритинг"); return; }
-  const { error } = await sb.from('employee_salaries').upsert({
-    employee_id: employeeId, effective_date: date, amount, created_by_name: state.profile.full_name
-  }, {onConflict:'employee_id,effective_date'});
-  if(error){ toast("Хатолик: "+error.message); return; }
-  toast("Сақланди ✓"); await loadAll(); renderTab();
+  toast("Ўчирилди ✓");
+  closeSheet();
+  await loadAll(); renderTab();
 }
 
 // ============================================================
