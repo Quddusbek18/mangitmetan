@@ -298,6 +298,136 @@ function closeSheet(){
 document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeSheet(); });
 
 // ============================================================
+// OFFLINE QUEUE — интернет йўқ пайтда кунлик ҳисоботни телефонда
+// сақлаб қолиш ва интернет қайтганда автоматик юбориш. localStorage
+// ишлатамиз (IndexedDB эмас) — бир нечта кутилаётган ҳисобот учун бу
+// етарли ва оддийроқ. iOS Safari/PWA Background Sync API'ни қўллаб-
+// қувватламайди, шунинг учун синхронизация фақат илова очиқ/фаол
+// бўлганда (онлайн бўлганда ёки 'online' ҳодисасида) ишга тушади —
+// бу икки платформада (Android ва iPhone) ҳам ишлайдиган ягона усул.
+// ============================================================
+const OFFLINE_QUEUE_KEY = 'mm_offline_queue_v1';
+function loadOfflineQueueFromStorage(){
+  try{ return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY)) || []; }catch(e){ return []; }
+}
+let offlineQueue = loadOfflineQueueFromStorage();
+function saveOfflineQueueToStorage(){
+  try{ localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(offlineQueue)); }catch(e){}
+}
+function isOnline(){ return typeof navigator==='undefined' || navigator.onLine!==false; }
+// Supabase'дан қайтган хато "тармоқ йўқлиги" сабабли эканини тахмин
+// қилади (бизнес-мантиқ хатоси — масалан дублика сана — эмас).
+function isNetworkError(e){
+  if(!isOnline()) return true;
+  if(!e) return false;
+  if(e.code) return false; // PostgREST/Postgres хатоси — тармоқ эмас, ҳақиқий хато
+  const msg = ((e.message||'')+'').toLowerCase();
+  return e instanceof TypeError || msg.includes('fetch') || msg.includes('network') || msg.includes('load failed');
+}
+function queueOfflineSubmission(type, payload){
+  const item = { id: 'q_'+Date.now()+'_'+Math.random().toString(36).slice(2,8), type, payload, createdAt: new Date().toISOString(), status:'pending', error:null };
+  offlineQueue.push(item);
+  saveOfflineQueueToStorage();
+  renderOfflineBanner();
+  return item;
+}
+function removeFromOfflineQueue(id){
+  offlineQueue = offlineQueue.filter(i=>i.id!==id);
+  saveOfflineQueueToStorage();
+  renderOfflineBanner();
+}
+function markQueueItemError(id, message){
+  const item = offlineQueue.find(i=>i.id===id);
+  if(item){ item.status='error'; item.error=message; }
+  saveOfflineQueueToStorage();
+  renderOfflineBanner();
+}
+function discardQueueItem(id){
+  if(!confirm("Бу ҳисоботни бутунлай ўчирасизми? (ҳеч қачон юборилмайди, базага ёзилмайди)")) return;
+  removeFromOfflineQueue(id);
+}
+function renderOfflineBanner(){
+  const el = document.getElementById('offlineBanner');
+  if(!el) return;
+  if(!offlineQueue.length){ el.innerHTML=''; return; }
+  const waiting = offlineQueue.filter(i=>i.status==='pending');
+  const errored = offlineQueue.filter(i=>i.status==='error');
+  el.innerHTML = `
+  <div class="card" style="border-color:var(--warn);background:var(--gold-wash);margin-bottom:14px">
+    <div class="section-title">
+      <h2 style="color:var(--warn)">📤 ${waiting.length?`${waiting.length} та ҳисобот юборилишни кутмоқда`:''}${waiting.length&&errored.length?' · ':''}${errored.length?`${errored.length} та хато`:''}</h2>
+      ${waiting.length?`<button class="btn small" onclick="syncOfflineQueue()">Қайта юбориш</button>`:''}
+    </div>
+    ${waiting.length?`<p class="hint">Интернет йўқ пайтда телефонда сақланган — интернет қайтганда автоматик юборилади. Иловани ёпманг, фақат интернетга уланинг.</p>`:''}
+    ${offlineQueue.map(item=>`
+      <div class="list-card" style="cursor:default">
+        <div class="list-card-main">
+          <div class="list-card-name">${item.type==='metan_entry'?'Метан':'Бензин'} ҳисоботи — ${esc(item.payload.date)}</div>
+          <div class="list-card-meta">${item.status==='error'?`<span style="color:var(--bad)">${esc(item.error||'хато')}</span>`:'Юборилиши кутилмоқда…'}</div>
+        </div>
+        ${item.status==='error'?`<button class="btn danger small" onclick="discardQueueItem('${item.id}')">Ўчириш</button>`:''}
+      </div>`).join('')}
+  </div>`;
+}
+async function submitMetanEntryPayload(f){
+  const { data: entryRow, error } = await sb.from('entries').insert({
+    date: f.date, operator_id: f.operator_id, operator_name: f.operator,
+    pump_end: f.pumpEnd, agres: f.agres,
+    uzcard: f.calc.uzcard, humo: f.calc.humo, qr: f.calc.qr,
+    sold_m3: f.calc.soldM3, sales_value: f.calc.salesValue, naqt: f.calc.naqt,
+    price: f.calc.price.sale_price,
+    izoh: f.izoh
+  }).select().single();
+  if(error) throw error;
+  if(f.deliveries && f.deliveries.length){
+    const rows = f.deliveries.map(d=>({entry_id: entryRow.id, company_id: d.company_id, m3: d.m3}));
+    const { error: e2 } = await sb.from('deliveries').insert(rows);
+    if(e2) throw e2;
+  }
+}
+async function submitBenzinEntryPayload(f){
+  const { data: entryRow, error } = await sb.from('benzin_entries').insert({
+    date: f.date, operator_id: f.operator_id, operator_name: f.operator,
+    readings: f.readings, naqd: f.naqd, uzkard: f.uzkard, xumo: f.xumo,
+    kechagi_note: f.kechagiVal ? parseFloat(f.kechagiVal) : null,
+    izoh: f.izoh
+  }).select().single();
+  if(error) throw error;
+  if(f.sales && f.sales.length){
+    const rows = f.sales.map(s=>({ entry_id: entryRow.id, company_id: s.company_id, fuel_type_id: s.fuel_type_id, liters: s.liters, price: s.price, sum: s.sum }));
+    const { error: e2 } = await sb.from('benzin_company_sales').insert(rows);
+    if(e2) throw e2;
+  }
+}
+// Навбатдаги ҳар бир ёзувни кетма-кет юборишга ҳаракат қилади. Тармоқ
+// хатосига дуч келса — тўхтайди (ҳали оффлайн, кейинроқ қайта уринилади).
+// Бизнес-мантиқ хатосига (масалан дублика сана) дуч келса — шу ёзувни
+// "хато" деб белгилайди ва кейингисига ўтади (абадий қайтармайди).
+let syncInProgress = false;
+async function syncOfflineQueue(){
+  if(syncInProgress || !isOnline() || !offlineQueue.length) return;
+  syncInProgress = true;
+  let changed = false;
+  for(const item of offlineQueue.slice()){
+    if(item.status==='error') continue;
+    try{
+      if(item.type==='metan_entry') await submitMetanEntryPayload(item.payload);
+      else if(item.type==='benzin_entry') await submitBenzinEntryPayload(item.payload);
+      removeFromOfflineQueue(item.id);
+      changed = true;
+    }catch(e){
+      if(isNetworkError(e)){ break; }
+      markQueueItemError(item.id, friendlyDbError(e));
+      changed = true;
+    }
+  }
+  syncInProgress = false;
+  if(changed){ toast("Сақланган ҳисобот(лар) юборилди ✓"); await loadAll(); renderTab(); }
+  renderOfflineBanner();
+}
+window.addEventListener('online', syncOfflineQueue);
+
+// ============================================================
 // AUTH
 // ============================================================
 // Хавфсизлик учун: бир логин 5 соатдан кейин АВТОМАТИК чиқиб кетади —
@@ -375,9 +505,24 @@ async function doLogout(){
 
 async function afterLogin(session){
   state.session = session;
-  const { data: profile, error } = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-  if(error || !profile){
-    document.getElementById('app').innerHTML = `<div class="card login-card"><p>Ҳисобингиз ҳали ролга боғланмаган. CEO билан боғланинг.</p><button class="btn secondary" onclick="doLogout()">Чиқиш</button></div>`;
+  let profile = null, offlineColdStart = false;
+  try{
+    const res = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+    if(res.error) throw res.error;
+    profile = res.data;
+  }catch(e){
+    // Тармоқ йўқлиги сабабли бўлса — кешдан фойдаланишга ҳаракат қиламиз
+    // (пастда). Бошқа хато бўлса, profile baribir null қолади.
+  }
+  if(!profile){
+    const cached = loadStateCache();
+    if(cached && cached.profile && cached.profile.id === session.user.id){
+      profile = cached.profile;
+      offlineColdStart = true;
+    }
+  }
+  if(!profile){
+    document.getElementById('app').innerHTML = `<div class="card login-card"><p>Ҳисобингиз ҳали ролга боғланмаган, ёки интернет йўқ ва аввал бу қурилмада киритилмаган. Интернетга уланиб қайта уриниб кўринг.</p><button class="btn secondary" onclick="doLogout()">Чиқиш</button></div>`;
     return;
   }
   state.profile = profile;
@@ -391,8 +536,22 @@ async function afterLogin(session){
   } else {
     currentStation = (station === 'both') ? null : station; // 'both' -> танлов экранини кўрсатади
   }
-  await loadAll();
+  try{
+    if(offlineColdStart) throw new Error('offline cold start');
+    await loadAll();
+  }catch(e){
+    // Интернет йўқ ва илова қайта очилган — кешланган эски маълумотдан
+    // фойдаланамиз, токи оператор ҳисоботни киритиб, навбатга қўя олсин.
+    const cached = loadStateCache();
+    if(cached && cached.state){
+      Object.assign(state, cached.state);
+      state.profile = profile;
+      state.session = session;
+      toast("📡 Интернет йўқ — эски маълумотлар кўрсатилмоқда. Киритилган ҳисобот интернет қайтганда юборилади.");
+    }
+  }
   renderShell();
+  syncOfflineQueue();
 }
 
 // ============================================================
@@ -445,6 +604,18 @@ async function loadAll(){
   state.entryEditLog = entryEditLog.data || [];
   state.bankTx = bankTx.data || [];
   state.projectNotes = projectNotes.data || [];
+  saveStateCache();
+}
+// Интернет бўлган пайтда юкланган маълумотни телефонда сақлаб қўяди —
+// кейин интернет йўқ пайтда иловани қайта очганда ҳам (онлайн сессия
+// давом этмаган тақдирда ҳам) эски маълумот билан ишлаш, ҳисобот
+// киритиш ва навбатга қўйиш мумкин бўлиши учун.
+const STATE_CACHE_KEY = 'mm_state_cache_v1';
+function saveStateCache(){
+  try{ localStorage.setItem(STATE_CACHE_KEY, JSON.stringify({ state, profile: state.profile, currentStation, savedAt: Date.now() })); }catch(e){}
+}
+function loadStateCache(){
+  try{ return JSON.parse(localStorage.getItem(STATE_CACHE_KEY)); }catch(e){ return null; }
 }
 
 function priceFor(dateStr){
@@ -568,6 +739,16 @@ function filopMarkSvg(px){
   </svg>`;
 }
 
+// Топбардаги кичик уланиш белгиси — оператор ҳар доим "онлайнми, йўқми"ни
+// кўриб турсин (ишонч учун), ҳисобот юбормасдан олдин ҳам.
+function connectivityBadgeHtml(){ return isOnline() ? '' : `<span class="pill bad">🔴 Оффлайн</span>`; }
+function updateConnBadge(){
+  const el = document.getElementById('connBadge');
+  if(el) el.innerHTML = connectivityBadgeHtml();
+}
+window.addEventListener('online', updateConnBadge);
+window.addEventListener('offline', updateConnBadge);
+
 // currentStation === null -> ҳали танланмаган (фақат profile.station==='both'
 // бўлганларда рўй беради) -> танлов экрани кўрсатилади.
 function renderShell(){
@@ -583,15 +764,18 @@ function renderShell(){
         ${filopMarkSvg(34)}
         <div><h1 style="margin-bottom:0">Мангит Метан — ${stationLabel}</h1><p class="who">${esc(state.profile.full_name)} — ${roleLabel(role)}</p></div>
       </div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;align-items:center">
+        <span id="connBadge">${connectivityBadgeHtml()}</span>
         ${canSwitch ? `<button class="btn secondary small" onclick="switchStation()">🔁 Станция</button>` : ''}
         <button class="btn secondary small" onclick="doLogout()">Чиқиш</button>
       </div>
     </div>
+    <div id="offlineBanner"></div>
     <div class="tabs" id="tabsRow"></div>
     <div id="tabBody"></div>`;
   document.getElementById('tabsRow').innerHTML = tabs.map(([id,label])=>
     `<button class="tab-btn ${id===activeTab?'active':''}" onclick="switchTab('${id}')">${label}</button>`).join('');
+  renderOfflineBanner();
   renderTab();
 }
 // Рўйхатдан ўтгандан кейинги (ёки станция алмаштиргандаги) танлов экрани.
@@ -1257,31 +1441,35 @@ async function doSubmitEntry(){
     return;
   }
 
+  const payload = { ...f, operator_id: state.profile.id, deliveries: pending.deliveries.slice() };
+
+  if(!isOnline()){
+    queueOfflineSubmission('metan_entry', payload);
+    closeReview();
+    toast("📤 Интернет йўқ — ҳисобот телефонда сақланди, интернет қайтганда ўзи юборилади");
+    pending = {deliveries:[]};
+    renderTab();
+    return;
+  }
+
   const btn = document.getElementById('reviewSubmitBtn');
   btn.disabled = true; btn.textContent = 'Юборилмоқда…';
   try{
-    const { data: entryRow, error } = await sb.from('entries').insert({
-      date: f.date, operator_id: state.profile.id, operator_name: f.operator,
-      pump_end: f.pumpEnd, agres: f.agres,
-      uzcard: f.calc.uzcard, humo: f.calc.humo, qr: f.calc.qr,
-      sold_m3: f.calc.soldM3, sales_value: f.calc.salesValue, naqt: f.calc.naqt,
-      price: f.calc.price.sale_price,
-      izoh: f.izoh
-    }).select().single();
-    if(error) throw error;
-
-    if(pending.deliveries.length){
-      const rows = pending.deliveries.map(d=>({entry_id: entryRow.id, company_id: d.company_id, m3: d.m3}));
-      const { error: e2 } = await sb.from('deliveries').insert(rows);
-      if(e2) throw e2;
-    }
-
+    await submitMetanEntryPayload(payload);
     closeReview();
     toast("Ҳисобот юборилди ✓");
     pending = {deliveries:[]};
     await loadAll();
     renderTab();
   }catch(e){
+    if(isNetworkError(e)){
+      queueOfflineSubmission('metan_entry', payload);
+      closeReview();
+      toast("📤 Интернетга уланиб бўлмади — ҳисобот телефонда сақланди, қайта уланганда ўзи юборилади");
+      pending = {deliveries:[]};
+      renderTab();
+      return;
+    }
     toast(friendlyDbError(e));
     btn.disabled = false; btn.textContent = 'Тасдиқлаш ва юбориш';
     await loadAll();
@@ -3434,27 +3622,38 @@ async function doSubmitBenzinEntry(){
     return;
   }
 
-  const btn = document.getElementById('bzReviewSubmitBtn');
-  btn.disabled = true; btn.textContent = 'Юборилмоқда…';
+  const payload = { ...f, operator_id: state.profile.id, operator: state.profile.full_name, sales: benzinPending.sales.slice() };
 
-  const { data: entryRow, error } = await sb.from('benzin_entries').insert({
-    date: f.date, operator_id: state.profile.id, operator_name: state.profile.full_name,
-    readings: f.readings, naqd: f.naqd, uzkard: f.uzkard, xumo: f.xumo,
-    kechagi_note: f.kechagiVal ? parseFloat(f.kechagiVal) : null,
-    izoh: f.izoh
-  }).select().single();
-  if(error){ toast(friendlyDbError(error)); btn.disabled=false; btn.textContent='Тасдиқлаш ва юбориш'; await loadAll(); return; }
-
-  if(benzinPending.sales.length){
-    const rows = benzinPending.sales.map(s=>({ entry_id: entryRow.id, company_id: s.company_id, fuel_type_id: s.fuel_type_id, liters: s.liters, price: s.price, sum: s.sum }));
-    const { error: e2 } = await sb.from('benzin_company_sales').insert(rows);
-    if(e2){ toast("Хатолик (компания сотуви): "+e2.message); btn.disabled=false; btn.textContent='Тасдиқлаш ва юбориш'; return; }
+  if(!isOnline()){
+    queueOfflineSubmission('benzin_entry', payload);
+    closeBenzinReview();
+    toast("📤 Интернет йўқ — ҳисобот телефонда сақланди, интернет қайтганда ўзи юборилади");
+    benzinPending = { sales: [] };
+    renderTab();
+    return;
   }
 
-  closeBenzinReview();
-  toast("Бензин ҳисоботи юборилди ✓");
-  benzinPending = { sales: [] };
-  await loadAll(); renderTab();
+  const btn = document.getElementById('bzReviewSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Юборилмоқда…';
+  try{
+    await submitBenzinEntryPayload(payload);
+    closeBenzinReview();
+    toast("Бензин ҳисоботи юборилди ✓");
+    benzinPending = { sales: [] };
+    await loadAll(); renderTab();
+  }catch(e){
+    if(isNetworkError(e)){
+      queueOfflineSubmission('benzin_entry', payload);
+      closeBenzinReview();
+      toast("📤 Интернетга уланиб бўлмади — ҳисобот телефонда сақланди, қайта уланганда ўзи юборилади");
+      benzinPending = { sales: [] };
+      renderTab();
+      return;
+    }
+    toast(friendlyDbError(e));
+    btn.disabled=false; btn.textContent='Тасдиқлаш ва юбориш';
+    await loadAll();
+  }
 }
 
 // ТТН'да тонна кўрсатилса ва шу ёқилғи учун зичлик Созламаларда
