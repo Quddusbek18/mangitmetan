@@ -369,7 +369,15 @@ async function afterLogin(session){
   }
   state.profile = profile;
   const station = profile.station || 'both';
-  currentStation = (station === 'both') ? null : station; // 'both' -> танлов экранини кўрсатади
+  if(station === 'both' && profile.role === 'ceo'){
+    // CEO/Owner учун: аввало станция танлаш эмас, тўғридан-тўғри умумий
+    // ҳолат (бизнеснинг энг муҳим рақамлари ва харажат киритиш тезкор
+    // тугмалари) кўринади — станция танлаш "🔁 Станция" тугмаси орқали
+    // кейин ҳам мумкин.
+    currentStation = 'umumiy';
+  } else {
+    currentStation = (station === 'both') ? null : station; // 'both' -> танлов экранини кўрсатади
+  }
   await loadAll();
   renderShell();
 }
@@ -2202,56 +2210,102 @@ function tplExpenses(role){
     <div id="gazForecastBox"></div>
   </div>
   <div class="card group-expense">
-    <div class="section-title"><h2>Препеймент (Газ / Ток)</h2></div>
+    <div class="section-title">
+      <h2>Препеймент (Газ / Ток)</h2>
+      ${canEnter?`<button class="add-fab" onclick="openNewPrepaymentSheet()">+ Янги</button>`:''}
+    </div>
     <div class="tile-row">
       <div class="tile"><div class="label">Шу ой — Газ</div><div class="value">${curGaz?fmt(curGaz.amount):'—'}</div></div>
       <div class="tile"><div class="label">Шу ой — Ток</div><div class="value">${curTok?fmt(curTok.amount):'—'}</div></div>
     </div>
-    <h3>Тарих</h3>
-    <div class="table-wrap">
-      <table><thead><tr><th>Ой</th><th>Тури</th><th>Сумма</th><th>Ҳажм (m3)</th><th>Изоҳ</th><th>Ким киритган</th>${canDelete?'<th></th>':''}</tr></thead>
-      <tbody>${state.prepayments.map(p=>
-        `<tr><td>${p.month}</td><td>${p.kind==='gaz'?'Газ':'Ток'}</td><td>${fmt(p.amount)}</td><td>${p.kind==='gaz'?(p.volume_m3!=null?fmt(p.volume_m3):'<span class="hint">тахминий</span>'):'—'}</td><td>${esc(p.note||'')}</td><td class="hint">${esc(p.created_by_name||'—')}</td>
-          ${canDelete?`<td><button class="del" onclick="deletePrepayment('${p.id}')">✕</button></td>`:''}</tr>`
-      ).join('') || `<tr><td colspan="${canDelete?7:6}" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
-    </div>
-    ${canEnter ? `<div class="action-box">
-      <h3>+ Янги препеймент қўшиш</h3>
-      <div class="row" style="margin-top:8px">
-        <div class="field"><label>Ой</label><input type="month" id="pp_month"></div>
-        <div class="field"><label>Тури</label><select id="pp_kind" onchange="document.getElementById('pp_volume_wrap').style.display=this.value==='gaz'?'':'none'"><option value="gaz">Газ</option><option value="tok">Ток</option></select></div>
-        <div class="field"><label>Сумма</label><input type="number" id="pp_amount"></div>
-        <div class="field" id="pp_volume_wrap"><label>Ҳажм (m3)</label><input type="number" id="pp_volume" placeholder="масалан 45000"></div>
-        <div class="field"><label>Изоҳ</label><input type="text" id="pp_note"></div>
-        <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addPrepayment()">Қўшиш</button></div>
-      </div>
-      <p class="hint" style="margin-top:6px">Ҳажм (m3) — шу препеймент учун таъминотчи билан келишилган газ ҳажми. Бўш қолдирсангиз ҳам бўлади (ФИФО ҳисоби тахминий давом этади), лекин АНИҲ ҲИСОБ учун киритиб туриш тавсия этилади.</p>
-    </div>` : ''}
+    <h3 style="margin-top:14px">Тарих</h3>
+    <div>${state.prepayments.slice().sort((a,b)=>b.month.localeCompare(a.month)).map(p=>`
+      <div class="list-card" onclick="openPrepaymentDetail('${p.id}')" role="button" tabindex="0">
+        <div class="list-card-main">
+          <div class="list-card-name">${p.month.slice(0,7)} — ${p.kind==='gaz'?'Газ':'Ток'}</div>
+          <div class="list-card-meta">${esc(p.note||(p.kind==='gaz'&&p.volume_m3!=null?fmt(p.volume_m3)+' m³':''))||'&nbsp;'}</div>
+        </div>
+        <div class="list-card-side">
+          <div class="list-card-value">${fmt(p.amount)}</div>
+          <span class="list-card-chevron">›</span>
+        </div>
+      </div>`).join('') || `<div class="empty">Ҳали киритилмаган</div>`}</div>
   </div>
 
   <div class="card group-expense">
-    <div class="section-title"><h2>Бошқа харажатлар</h2></div>
+    <div class="section-title">
+      <h2>Бошқа харажатлар</h2>
+      ${canEnter?`<button class="add-fab" onclick="openNewOtherExpenseSheet('metan')">+ Янги</button>`:''}
+    </div>
     <div class="tile-row">
       <div class="tile"><div class="label">Шу ой жами</div><div class="value">${fmt(otherThisMonth)}</div></div>
     </div>
-    <h3>Тарих</h3>
-    <div class="table-wrap">
-      <table><thead><tr><th>Сана</th><th>Тавсиф</th><th>Сумма</th><th>Ким киритган</th>${canDelete?'<th></th>':''}</tr></thead>
-      <tbody>${state.otherExpenses.filter(e=>(e.station||'metan')==='metan').map(e=>
-        `<tr><td>${e.date}</td><td>${esc(e.description)}</td><td>${fmt(e.amount)}</td><td class="hint">${esc(e.created_by_name||'—')}</td>
-          ${canDelete?`<td><button class="del" onclick="deleteOtherExpense('${e.id}')">✕</button></td>`:''}</tr>`
-      ).join('') || `<tr><td colspan="${canDelete?5:4}" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
-    </div>
-    ${canEnter ? `<div class="action-box">
-      <h3>+ Янги харажат қўшиш</h3>
-      <div class="row" style="margin-top:8px">
-        <div class="field"><label>Сана</label><input type="date" id="oe_date_metan" value="${todayISO()}"></div>
-        <div class="field" style="flex:2"><label>Тавсиф</label><input type="text" id="oe_desc_metan"></div>
-        <div class="field"><label>Сумма</label><input type="number" id="oe_amount_metan"></div>
-        <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addOtherExpense('metan')">Қўшиш</button></div>
-      </div>
-    </div>` : ''}
+    <h3 style="margin-top:14px">Тарих</h3>
+    <div>${state.otherExpenses.filter(e=>(e.station||'metan')==='metan').map(e=>`
+      <div class="list-card" onclick="openOtherExpenseDetail('${e.id}')" role="button" tabindex="0">
+        <div class="list-card-main">
+          <div class="list-card-name">${esc(e.description)}</div>
+          <div class="list-card-meta">${e.date}</div>
+        </div>
+        <div class="list-card-side">
+          <div class="list-card-value">${fmt(e.amount)}</div>
+          <span class="list-card-chevron">›</span>
+        </div>
+      </div>`).join('') || `<div class="empty">Ҳали киритилмаган</div>`}</div>
   </div>`;
+}
+function openNewPrepaymentSheet(){
+  openSheet(`
+    <h2 style="margin-bottom:10px">Янги препеймент қўшиш</h2>
+    <div class="row">
+      <div class="field"><label>Ой</label><input type="month" id="pp_month"></div>
+      <div class="field"><label>Тури</label><select id="pp_kind" onchange="document.getElementById('pp_volume_wrap').style.display=this.value==='gaz'?'':'none'"><option value="gaz">Газ</option><option value="tok">Ток</option></select></div>
+    </div>
+    <div class="field"><label>Сумма</label><input type="number" id="pp_amount"></div>
+    <div class="field" id="pp_volume_wrap"><label>Ҳажм (m3)</label><input type="number" id="pp_volume" placeholder="масалан 45000"></div>
+    <div class="field"><label>Изоҳ</label><input type="text" id="pp_note"></div>
+    <p class="hint">Ҳажм (m3) — шу препеймент учун таъминотчи билан келишилган газ ҳажми. Бўш қолдирсангиз ҳам бўлади, лекин АНИҲ ҲИСОБ учун киритиб туриш тавсия этилади.</p>
+    <button class="btn" style="width:100%;margin-top:4px" onclick="addPrepayment()">Қўшиш</button>
+  `);
+}
+function openPrepaymentDetail(id){
+  const p = state.prepayments.find(x=>x.id===id);
+  if(!p) return;
+  const canDelete = state.profile.role==='ceo';
+  openSheet(`
+    <h2 style="margin-bottom:10px">${p.month.slice(0,7)} — ${p.kind==='gaz'?'Газ':'Ток'}</h2>
+    <div class="company-card-stats">
+      <div><span class="k">Сумма</span><span class="v">${fmt(p.amount)}</span></div>
+      ${p.kind==='gaz'?`<div><span class="k">Ҳажм</span><span class="v">${p.volume_m3!=null?fmt(p.volume_m3)+' m³':'тахминий'}</span></div>`:''}
+      <div><span class="k">Изоҳ</span><span class="v">${esc(p.note||'—')}</span></div>
+      <div><span class="k">Ким киритган</span><span class="v">${esc(p.created_by_name||'—')}</span></div>
+    </div>
+    ${canDelete?`<button class="btn danger small" style="width:100%;margin-top:18px" onclick="deletePrepayment('${id}')">Ўчириш</button>`:''}
+  `);
+}
+function openNewOtherExpenseSheet(station){
+  station = station || 'metan';
+  openSheet(`
+    <h2 style="margin-bottom:10px">Янги харажат қўшиш</h2>
+    <div class="field"><label>Сана</label><input type="date" id="oe_date_${station}" value="${todayISO()}"></div>
+    <div class="field"><label>Тавсиф</label><input type="text" id="oe_desc_${station}"></div>
+    <div class="field"><label>Сумма</label><input type="number" id="oe_amount_${station}"></div>
+    <button class="btn" style="width:100%;margin-top:4px" onclick="addOtherExpense('${station}')">Қўшиш</button>
+  `);
+}
+function openOtherExpenseDetail(id){
+  const e = state.otherExpenses.find(x=>x.id===id);
+  if(!e) return;
+  const canDelete = state.profile.role==='ceo';
+  openSheet(`
+    <h2 style="margin-bottom:10px">${esc(e.description)}</h2>
+    <div class="company-card-stats">
+      <div><span class="k">Сана</span><span class="v">${e.date}</span></div>
+      <div><span class="k">Сумма</span><span class="v">${fmt(e.amount)}</span></div>
+      <div><span class="k">Ким киритган</span><span class="v">${esc(e.created_by_name||'—')}</span></div>
+    </div>
+    ${canDelete?`<button class="btn danger small" style="width:100%;margin-top:18px" onclick="deleteOtherExpense('${id}')">Ўчириш</button>`:''}
+  `);
 }
 async function addPrepayment(){
   const monthVal = document.getElementById('pp_month').value; // yyyy-mm
@@ -2267,19 +2321,25 @@ async function addPrepayment(){
     created_by_name: state.profile.full_name
   }, { onConflict: 'month,kind' });
   if(error){ toast("Хатолик: "+error.message); return; }
-  toast("Сақланди ✓"); await loadAll(); renderTab();
+  toast("Сақланди ✓");
+  closeSheet();
+  await loadAll(); renderTab();
 }
 async function deletePrepayment(id){
   if(!confirm("Ўчирасизми?")) return;
   const { error } = await sb.from('prepayments').delete().eq('id', id);
   if(error){ toast("Хатолик: "+error.message); return; }
-  toast("Ўчирилди ✓"); await loadAll(); renderTab();
+  toast("Ўчирилди ✓");
+  closeSheet();
+  await loadAll(); renderTab();
 }
 async function deleteOtherExpense(id){
   if(!confirm("Ўчирасизми?")) return;
   const { error } = await sb.from('other_expenses').delete().eq('id', id);
   if(error){ toast("Хатолик: "+error.message); return; }
-  toast("Ўчирилди ✓"); await loadAll(); renderTab();
+  toast("Ўчирилди ✓");
+  closeSheet();
+  await loadAll(); renderTab();
 }
 async function addOtherExpense(station){
   station = station || 'metan';
@@ -2291,7 +2351,9 @@ async function addOtherExpense(station){
     created_by_name: state.profile.full_name
   });
   if(error){ toast("Хатолик: "+error.message); return; }
-  toast("Сақланди ✓"); await loadAll(); renderTab();
+  toast("Сақланди ✓");
+  closeSheet();
+  await loadAll(); renderTab();
 }
 
 // ============================================================
@@ -2315,82 +2377,148 @@ function tplSettings(){
   </div>
 
   <div class="card group-settings">
-    <div class="section-title"><h2>Нарх (Сотув / Таннарх / Акциз / Йўқотиш коэфф.)</h2></div>
+    <div class="section-title">
+      <h2>Нарх (Сотув / Таннарх / Акциз / Йўқотиш коэфф.)</h2>
+      <button class="add-fab" onclick="openNewPriceSheet()">+ Янги</button>
+    </div>
     ${curPrice ? `<div class="tile-row">
       <div class="tile"><div class="label">Сотув нархи</div><div class="value">${fmt(curPrice.sale_price)}</div></div>
       <div class="tile"><div class="label">Таннарх</div><div class="value">${fmt(curPrice.cost_price)}</div></div>
       <div class="tile"><div class="label">Акциз</div><div class="value">${fmt(curPrice.excise)}</div></div>
       <div class="tile"><div class="label">Йўқотиш коэфф.</div><div class="value">${curPrice.loss_coefficient}</div></div>
     </div><p class="hint">Амалда ${curPrice.effective_date} дан бери.</p>` : `<div class="empty">Ҳали нарх киритилмаган</div>`}
-    <details style="margin-top:10px">
-      <summary style="cursor:pointer;color:var(--muted);font-size:.8rem;font-weight:600">Тўлиқ тарихни кўрсатиш (${state.prices.length})</summary>
-      <div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>Сана (дан)</th><th>Сотув</th><th>Таннарх</th><th>Акциз</th><th>Йўқотиш коэфф.</th><th>Ким киритган</th></tr></thead>
-        <tbody>${state.prices.map(p=>`<tr><td>${p.effective_date}</td><td>${fmt(p.sale_price)}</td><td>${fmt(p.cost_price)}</td><td>${fmt(p.excise)}</td><td>${p.loss_coefficient}</td><td class="hint">${esc(p.created_by_name||'—')}</td></tr>`).join('')}</tbody></table></div>
-    </details>
-    <div class="confirm-wrap">
-      <p class="hint">⚠️ Бу узоқ муддат ўзгармайдиган рақам. Фақат нарх ҳақиқатан ҳам ўзгарган кунда янги қатор қўшинг — эски кунлар эски нархда ҳисобланаверади. Йўқотиш коэффициенти — "Давлат ҳисоботи"да Агрес кўрсаткичини давлат ҳисобига мослаштириш учун ишлатилади (эски тизимда доим 0.986 бўлган).</p>
-      <div class="row">
-        <div class="field"><label>Амал қилиш санаси</label><input type="date" id="np_date"></div>
-        <div class="field"><label>Сотув нархи</label><input type="number" id="np_sale"></div>
-        <div class="field"><label>Таннарх</label><input type="number" id="np_cost"></div>
-        <div class="field"><label>Акциз</label><input type="number" id="np_excise"></div>
-        <div class="field"><label>Йўқотиш коэфф.</label><input type="number" step="0.001" id="np_loss" value="0.986"></div>
-      </div>
-      <label style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="checkbox" id="np_confirm" style="width:auto"> Ҳа, нарх ҳақиқатан ҳам ўзгарди</label>
-      <button class="btn small" onclick="addPrice()">Янги нарх қўшиш</button>
-    </div>
+    <h3 style="margin-top:14px">Тарих (${state.prices.length})</h3>
+    <div>${state.prices.slice().sort((a,b)=>b.effective_date.localeCompare(a.effective_date)).map(p=>`
+      <div class="list-card" onclick="openPriceDetail('${p.effective_date}')" role="button" tabindex="0">
+        <div class="list-card-main"><div class="list-card-name">${p.effective_date}</div><div class="list-card-meta">${esc(p.created_by_name||'—')}</div></div>
+        <div class="list-card-side"><div class="list-card-value">${fmt(p.sale_price)}</div><span class="list-card-chevron">›</span></div>
+      </div>`).join('')}</div>
   </div>
 
   <div class="card group-tax">
-    <div class="section-title"><h2>Солиқ ставкалари</h2></div>
+    <div class="section-title">
+      <h2>Солиқ ставкалари</h2>
+      <button class="add-fab" onclick="openNewTaxRateSheet()">+ Янги</button>
+    </div>
     ${curTax ? `<div class="tile-row">
       <div class="tile"><div class="label">НДС</div><div class="value">${pct(curTax.nds_rate)}</div></div>
       <div class="tile"><div class="label">Ижтимоий</div><div class="value">${pct(curTax.social_tax_rate)}</div></div>
       <div class="tile"><div class="label">Фойда</div><div class="value">${pct(curTax.profit_tax_rate)}</div></div>
     </div><p class="hint">Амалда ${curTax.effective_date} дан бери.</p>` : `<div class="empty">Ҳали ставка киритилмаган</div>`}
-    <details style="margin-top:10px">
-      <summary style="cursor:pointer;color:var(--muted);font-size:.8rem;font-weight:600">Тўлиқ тарихни кўрсатиш (${state.taxRates.length})</summary>
-      <div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>Сана (дан)</th><th>НДС</th><th>Ижтимоий</th><th>Фойда</th><th>Ким киритган</th></tr></thead>
-        <tbody>${state.taxRates.map(t=>`<tr><td>${t.effective_date}</td><td>${pct(t.nds_rate)}</td><td>${pct(t.social_tax_rate)}</td><td>${pct(t.profit_tax_rate)}</td><td class="hint">${esc(t.created_by_name||'—')}</td></tr>`).join('')}</tbody></table></div>
-    </details>
-    <div class="confirm-wrap">
-      <div class="row">
-        <div class="field"><label>Амал қилиш санаси</label><input type="date" id="tx_date"></div>
-        <div class="field"><label>НДС (%)</label><input type="number" step="0.1" id="tx_nds"></div>
-        <div class="field"><label>Ижтимоий (%)</label><input type="number" step="0.1" id="tx_social"></div>
-        <div class="field"><label>Фойда (%)</label><input type="number" step="0.1" id="tx_profit"></div>
-      </div>
-      <label style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="checkbox" id="tx_confirm" style="width:auto"> Ҳа, солиқ ставкаси ҳақиқатан ҳам ўзгарди</label>
-      <button class="btn small" onclick="addTaxRate()">Янги ставка қўшиш</button>
-    </div>
+    <h3 style="margin-top:14px">Тарих (${state.taxRates.length})</h3>
+    <div>${state.taxRates.slice().sort((a,b)=>b.effective_date.localeCompare(a.effective_date)).map(t=>`
+      <div class="list-card" onclick="openTaxRateDetail('${t.effective_date}')" role="button" tabindex="0">
+        <div class="list-card-main"><div class="list-card-name">${t.effective_date}</div><div class="list-card-meta">${esc(t.created_by_name||'—')}</div></div>
+        <div class="list-card-side"><div class="list-card-value">НДС ${pct(t.nds_rate)}</div><span class="list-card-chevron">›</span></div>
+      </div>`).join('')}</div>
   </div>
 
   <div class="card group-settings">
-    <div class="section-title"><h2>Доимий харажатлар (Иш ҳақи / Банк кредити / Ер-мулк / Электр)</h2></div>
+    <div class="section-title">
+      <h2>Доимий харажатлар (Иш ҳақи / Банк кредити / Ер-мулк / Электр)</h2>
+      <button class="add-fab" onclick="openNewFixedCostSheet()">+ Янги</button>
+    </div>
     ${curFixed ? `<div class="tile-row">
       <div class="tile"><div class="label">Иш ҳақи</div><div class="value">${fmt(curFixed.salary)}</div></div>
       <div class="tile"><div class="label">Банк кредити</div><div class="value">${fmt(curFixed.bank_loan_interest)}</div></div>
       <div class="tile"><div class="label">Ер-мулк</div><div class="value">${fmt(curFixed.land_property_tax)}</div></div>
       <div class="tile"><div class="label">Электр (ойлик)</div><div class="value">${fmt(curFixed.electricity_tariff)}</div></div>
     </div><p class="hint">Амалда ${curFixed.effective_date} дан бери.</p>` : `<div class="empty">Ҳали киритилмаган</div>`}
-    <p class="hint">Электр — шу ойнинг ЖАМИ электр харажати (сўмда), тарифи эмас. Ҳар ой электр ҳисоби келгач, шу ерга шу ойнинг умумий суммасини янги қатор қилиб қўшинг — акс ҳолда "Ойлик даромад ҳисоботи"да электр харажати 0 (ёки эскирган) кўринади.</p>
-    <details style="margin-top:4px">
-      <summary style="cursor:pointer;color:var(--muted);font-size:.8rem;font-weight:600">Тўлиқ тарихни кўрсатиш (${state.fixedCosts.length})</summary>
-      <div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>Сана (дан)</th><th>Иш ҳақи</th><th>Банк кредити</th><th>Ер-мулк</th><th>Электр (ойлик, жами)</th><th>Ким киритган</th></tr></thead>
-        <tbody>${state.fixedCosts.map(f=>`<tr><td>${f.effective_date}</td><td>${fmt(f.salary)}</td><td>${fmt(f.bank_loan_interest)}</td><td>${fmt(f.land_property_tax)}</td><td>${fmt(f.electricity_tariff)}</td><td class="hint">${esc(f.created_by_name||'—')}</td></tr>`).join('')}</tbody></table></div>
-    </details>
-    <div class="confirm-wrap">
-      <div class="row">
-        <div class="field"><label>Амал қилиш санаси</label><input type="date" id="fc_date"></div>
-        <div class="field"><label>Иш ҳақи</label><input type="number" id="fc_salary"></div>
-        <div class="field"><label>Банк кредити</label><input type="number" id="fc_bank"></div>
-        <div class="field"><label>Ер-мулк солиғи</label><input type="number" id="fc_land"></div>
-        <div class="field"><label>Электр (ойлик, жами сўм)</label><input type="number" id="fc_elec"></div>
-      </div>
-      <label style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="checkbox" id="fc_confirm" style="width:auto"> Ҳа, бу рақамлар ҳақиқатан ҳам ўзгарди</label>
-      <button class="btn small" onclick="addFixedCost()">Янги қиймат қўшиш</button>
-    </div>
+    <p class="hint">Электр — шу ойнинг ЖАМИ электр харажати (сўмда), тарифи эмас. Ҳар ой электр ҳисоби келгач, шу ерга шу ойнинг умумий суммасини янги қатор қилиб қўшинг.</p>
+    <h3 style="margin-top:14px">Тарих (${state.fixedCosts.length})</h3>
+    <div>${state.fixedCosts.slice().sort((a,b)=>b.effective_date.localeCompare(a.effective_date)).map(f=>`
+      <div class="list-card" onclick="openFixedCostDetail('${f.effective_date}')" role="button" tabindex="0">
+        <div class="list-card-main"><div class="list-card-name">${f.effective_date}</div><div class="list-card-meta">${esc(f.created_by_name||'—')}</div></div>
+        <div class="list-card-side"><div class="list-card-value">${fmt(f.salary)}</div><span class="list-card-chevron">›</span></div>
+      </div>`).join('')}</div>
   </div>`;
+}
+function openNewPriceSheet(){
+  openSheet(`
+    <h2 style="margin-bottom:10px">Янги нарх қўшиш</h2>
+    <p class="hint">⚠️ Бу узоқ муддат ўзгармайдиган рақам. Фақат нарх ҳақиқатан ҳам ўзгарган кунда янги қатор қўшинг — эски кунлар эски нархда ҳисобланаверади.</p>
+    <div class="field"><label>Амал қилиш санаси</label><input type="date" id="np_date"></div>
+    <div class="row">
+      <div class="field"><label>Сотув нархи</label><input type="number" id="np_sale"></div>
+      <div class="field"><label>Таннарх</label><input type="number" id="np_cost"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Акциз</label><input type="number" id="np_excise"></div>
+      <div class="field"><label>Йўқотиш коэфф.</label><input type="number" step="0.001" id="np_loss" value="0.986"></div>
+    </div>
+    <label style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="checkbox" id="np_confirm" style="width:auto"> Ҳа, нарх ҳақиқатан ҳам ўзгарди</label>
+    <button class="btn" style="width:100%" onclick="addPrice()">Қўшиш</button>
+  `);
+}
+function openPriceDetail(effDate){
+  const p = state.prices.find(x=>x.effective_date===effDate);
+  if(!p) return;
+  openSheet(`
+    <h2 style="margin-bottom:10px">Нарх — ${p.effective_date} дан</h2>
+    <div class="company-card-stats">
+      <div><span class="k">Сотув нархи</span><span class="v">${fmt(p.sale_price)}</span></div>
+      <div><span class="k">Таннарх</span><span class="v">${fmt(p.cost_price)}</span></div>
+      <div><span class="k">Акциз</span><span class="v">${fmt(p.excise)}</span></div>
+      <div><span class="k">Йўқотиш коэфф.</span><span class="v">${p.loss_coefficient}</span></div>
+      <div><span class="k">Ким киритган</span><span class="v">${esc(p.created_by_name||'—')}</span></div>
+    </div>
+  `);
+}
+function openNewTaxRateSheet(){
+  openSheet(`
+    <h2 style="margin-bottom:10px">Янги солиқ ставкаси қўшиш</h2>
+    <div class="field"><label>Амал қилиш санаси</label><input type="date" id="tx_date"></div>
+    <div class="row">
+      <div class="field"><label>НДС (%)</label><input type="number" step="0.1" id="tx_nds"></div>
+      <div class="field"><label>Ижтимоий (%)</label><input type="number" step="0.1" id="tx_social"></div>
+    </div>
+    <div class="field"><label>Фойда (%)</label><input type="number" step="0.1" id="tx_profit"></div>
+    <label style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="checkbox" id="tx_confirm" style="width:auto"> Ҳа, солиқ ставкаси ҳақиқатан ҳам ўзгарди</label>
+    <button class="btn" style="width:100%" onclick="addTaxRate()">Қўшиш</button>
+  `);
+}
+function openTaxRateDetail(effDate){
+  const t = state.taxRates.find(x=>x.effective_date===effDate);
+  if(!t) return;
+  openSheet(`
+    <h2 style="margin-bottom:10px">Солиқ ставкаси — ${t.effective_date} дан</h2>
+    <div class="company-card-stats">
+      <div><span class="k">НДС</span><span class="v">${pct(t.nds_rate)}</span></div>
+      <div><span class="k">Ижтимоий</span><span class="v">${pct(t.social_tax_rate)}</span></div>
+      <div><span class="k">Фойда</span><span class="v">${pct(t.profit_tax_rate)}</span></div>
+      <div><span class="k">Ким киритган</span><span class="v">${esc(t.created_by_name||'—')}</span></div>
+    </div>
+  `);
+}
+function openNewFixedCostSheet(){
+  openSheet(`
+    <h2 style="margin-bottom:10px">Доимий харажат — янги қиймат</h2>
+    <div class="field"><label>Амал қилиш санаси</label><input type="date" id="fc_date"></div>
+    <div class="row">
+      <div class="field"><label>Иш ҳақи</label><input type="number" id="fc_salary"></div>
+      <div class="field"><label>Банк кредити</label><input type="number" id="fc_bank"></div>
+    </div>
+    <div class="row">
+      <div class="field"><label>Ер-мулк солиғи</label><input type="number" id="fc_land"></div>
+      <div class="field"><label>Электр (ойлик, жами сўм)</label><input type="number" id="fc_elec"></div>
+    </div>
+    <label style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="checkbox" id="fc_confirm" style="width:auto"> Ҳа, бу рақамлар ҳақиқатан ҳам ўзгарди</label>
+    <button class="btn" style="width:100%" onclick="addFixedCost()">Қўшиш</button>
+  `);
+}
+function openFixedCostDetail(effDate){
+  const f = state.fixedCosts.find(x=>x.effective_date===effDate && (x.station||'metan')==='metan');
+  if(!f) return;
+  openSheet(`
+    <h2 style="margin-bottom:10px">Доимий харажат — ${f.effective_date} дан</h2>
+    <div class="company-card-stats">
+      <div><span class="k">Иш ҳақи</span><span class="v">${fmt(f.salary)}</span></div>
+      <div><span class="k">Банк кредити</span><span class="v">${fmt(f.bank_loan_interest)}</span></div>
+      <div><span class="k">Ер-мулк</span><span class="v">${fmt(f.land_property_tax)}</span></div>
+      <div><span class="k">Электр (ойлик)</span><span class="v">${fmt(f.electricity_tariff)}</span></div>
+      <div><span class="k">Ким киритган</span><span class="v">${esc(f.created_by_name||'—')}</span></div>
+    </div>
+  `);
 }
 async function addPrice(){
   if(!document.getElementById('np_confirm').checked){ toast("Аввал тасдиқланг"); return; }
@@ -2403,7 +2531,9 @@ async function addPrice(){
     created_by_name: state.profile.full_name
   }, {onConflict:'effective_date'});
   if(error){ toast("Хатолик: "+error.message); return; }
-  toast("Нарх қўшилди ✓"); await loadAll(); renderTab();
+  toast("Нарх қўшилди ✓");
+  closeSheet();
+  await loadAll(); renderTab();
 }
 async function addTaxRate(){
   if(!document.getElementById('tx_confirm').checked){ toast("Аввал тасдиқланг"); return; }
@@ -2415,7 +2545,9 @@ async function addTaxRate(){
     created_by_name: state.profile.full_name
   }, {onConflict:'effective_date'});
   if(error){ toast("Хатолик: "+error.message); return; }
-  toast("Ставка қўшилди ✓"); await loadAll(); renderTab();
+  toast("Ставка қўшилди ✓");
+  closeSheet();
+  await loadAll(); renderTab();
 }
 async function addFixedCost(){
   if(!document.getElementById('fc_confirm').checked){ toast("Аввал тасдиқланг"); return; }
@@ -2429,7 +2561,9 @@ async function addFixedCost(){
     created_by_name: state.profile.full_name
   }, {onConflict:'effective_date,station'});
   if(error){ toast("Хатолик: "+error.message); return; }
-  toast("Қиймат қўшилди ✓"); await loadAll(); renderTab();
+  toast("Қиймат қўшилди ✓");
+  closeSheet();
+  await loadAll(); renderTab();
 }
 async function addBenzinFixedCost(){
   if(!document.getElementById('bfc_confirm').checked){ toast("Аввал тасдиқланг"); return; }
@@ -2443,7 +2577,9 @@ async function addBenzinFixedCost(){
     created_by_name: state.profile.full_name
   }, {onConflict:'effective_date,station'});
   if(error){ toast("Хатолик: "+error.message); return; }
-  toast("Қиймат қўшилди ✓"); await loadAll(); renderTab();
+  toast("Қиймат қўшилди ✓");
+  closeSheet();
+  await loadAll(); renderTab();
 }
 
 // ============================================================
@@ -2719,51 +2855,64 @@ function tplBenzinExpenses(role){
     .reduce((s,e)=>s+(e.amount||0),0);
   return `
   <div class="card group-settings">
-    <div class="section-title"><h2>Электр энергияси (ойлик, жами)</h2></div>
+    <div class="section-title">
+      <h2>Электр энергияси (ойлик, жами)</h2>
+      ${canEditElec?`<button class="add-fab" onclick="openNewBenzinElecSheet()">+ Янги</button>`:''}
+    </div>
     ${curElec ? `<div class="tile-row"><div class="tile"><div class="label">Ҳозирги ойлик</div><div class="value">${fmt(curElec.electricity_tariff)}</div></div></div>
     <p class="hint">Амалда ${curElec.effective_date} дан бери.</p>` : `<div class="empty">Ҳали киритилмаган</div>`}
-    <details style="margin-top:6px">
-      <summary style="cursor:pointer;color:var(--muted);font-size:.8rem;font-weight:600">Тўлиқ тарихни кўрсатиш (${bzFixedCosts.length})</summary>
-      <div class="table-wrap" style="margin-top:8px"><table><thead><tr><th>Сана (дан)</th><th>Электр (ойлик, жами)</th><th>Ким киритган</th></tr></thead>
-        <tbody>${bzFixedCosts.map(f=>`<tr><td>${f.effective_date}</td><td>${fmt(f.electricity_tariff)}</td><td class="hint">${esc(f.created_by_name||'—')}</td></tr>`).join('') || `<tr><td colspan="3" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table></div>
-    </details>
-    ${canEditElec ? `<div class="action-box">
-      <h3>+ Янги қиймат қўшиш</h3>
-      <p class="hint" style="margin-top:4px">Ҳар ой электр ҳисоби келгач, шу ойнинг умумий суммасини (сўмда) шу ерга янги қатор қилиб қўшинг.</p>
-      <div class="row" style="margin-top:8px">
-        <div class="field"><label>Амал қилиш санаси</label><input type="date" id="bfc_date" value="${todayISO()}"></div>
-        <div class="field"><label>Электр (ойлик, жами сўм)</label><input type="number" id="bfc_elec"></div>
-      </div>
-      <label style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="checkbox" id="bfc_confirm" style="width:auto"> Ҳа, бу рақам ҳақиқатан ҳам ўзгарди</label>
-      <button class="btn small" onclick="addBenzinFixedCost()">Янги қиймат қўшиш</button>
-    </div>` : ''}
+    <h3 style="margin-top:14px">Тарих</h3>
+    <div>${bzFixedCosts.slice().sort((a,b)=>b.effective_date.localeCompare(a.effective_date)).map(f=>`
+      <div class="list-card" onclick="openBenzinElecDetail('${f.id}')" role="button" tabindex="0">
+        <div class="list-card-main">
+          <div class="list-card-name">${f.effective_date}</div>
+          <div class="list-card-meta">${esc(f.created_by_name||'—')}</div>
+        </div>
+        <div class="list-card-side"><div class="list-card-value">${fmt(f.electricity_tariff)}</div><span class="list-card-chevron">›</span></div>
+      </div>`).join('') || `<div class="empty">Ҳали киритилмаган</div>`}</div>
   </div>
 
   <div class="card group-expense">
-    <div class="section-title"><h2>Бошқа харажатлар</h2></div>
-    <div class="tile-row"><div class="tile"><div class="label">Шу ой жами</div><div class="value">${fmt(otherThisMonth)}</div></div></div>
-    <h3>Тарих</h3>
-    <div class="table-wrap">
-      <table><thead><tr><th>Сана</th><th>Тавсиф</th><th>Сумма</th><th>Ким киритган</th>${canDelete?'<th></th>':''}</tr></thead>
-      <tbody>${state.otherExpenses.filter(e=>(e.station||'metan')==='benzin').map(e=>
-        `<tr><td>${e.date}</td><td>${esc(e.description)}</td><td>${fmt(e.amount)}</td><td class="hint">${esc(e.created_by_name||'—')}</td>
-          ${canDelete?`<td><button class="del" onclick="deleteOtherExpense('${e.id}')">✕</button></td>`:''}</tr>`
-      ).join('') || `<tr><td colspan="${canDelete?5:4}" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
+    <div class="section-title">
+      <h2>Бошқа харажатлар</h2>
+      ${canEnter?`<button class="add-fab" onclick="openNewOtherExpenseSheet('benzin')">+ Янги</button>`:''}
     </div>
-    ${canEnter ? `<div class="action-box">
-      <h3>+ Янги харажат қўшиш</h3>
-      <div class="row" style="margin-top:8px">
-        <div class="field"><label>Сана</label><input type="date" id="oe_date_benzin" value="${todayISO()}"></div>
-        <div class="field" style="flex:2"><label>Тавсиф</label><input type="text" id="oe_desc_benzin"></div>
-        <div class="field"><label>Сумма</label><input type="number" id="oe_amount_benzin"></div>
-        <div class="field" style="flex:0 0 auto;align-self:flex-end"><button class="btn small" onclick="addOtherExpense('benzin')">Қўшиш</button></div>
-      </div>
-    </div>` : ''}
+    <div class="tile-row"><div class="tile"><div class="label">Шу ой жами</div><div class="value">${fmt(otherThisMonth)}</div></div></div>
+    <h3 style="margin-top:14px">Тарих</h3>
+    <div>${state.otherExpenses.filter(e=>(e.station||'metan')==='benzin').map(e=>`
+      <div class="list-card" onclick="openOtherExpenseDetail('${e.id}')" role="button" tabindex="0">
+        <div class="list-card-main">
+          <div class="list-card-name">${esc(e.description)}</div>
+          <div class="list-card-meta">${e.date}</div>
+        </div>
+        <div class="list-card-side"><div class="list-card-value">${fmt(e.amount)}</div><span class="list-card-chevron">›</span></div>
+      </div>`).join('') || `<div class="empty">Ҳали киритилмаган</div>`}</div>
   </div>
 
   <p class="hint">Ижтимоий солиқ ва фойда солиғи ставкалари МЕТАН БИЛАН БИР ХИЛ — "Бензин → Созламалар"да киритилади/ўзгартирилади, ва "Ҳисоботлар"даги ойлик ҳисобда автоматик қўлланилади.</p>`;
 }
 function afterRenderBenzinExpenses(){ /* ҳозирча алоҳида init шарт эмас */ }
+function openNewBenzinElecSheet(){
+  openSheet(`
+    <h2 style="margin-bottom:10px">Электр — янги қиймат қўшиш</h2>
+    <p class="hint">Ҳар ой электр ҳисоби келгач, шу ойнинг умумий суммасини (сўмда) шу ерга янги қатор қилиб қўшинг.</p>
+    <div class="field"><label>Амал қилиш санаси</label><input type="date" id="bfc_date" value="${todayISO()}"></div>
+    <div class="field"><label>Электр (ойлик, жами сўм)</label><input type="number" id="bfc_elec"></div>
+    <label style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="checkbox" id="bfc_confirm" style="width:auto"> Ҳа, бу рақам ҳақиқатан ҳам ўзгарди</label>
+    <button class="btn" style="width:100%" onclick="addBenzinFixedCost()">Қўшиш</button>
+  `);
+}
+function openBenzinElecDetail(id){
+  const f = state.fixedCosts.find(x=>x.id===id);
+  if(!f) return;
+  openSheet(`
+    <h2 style="margin-bottom:10px">${f.effective_date}</h2>
+    <div class="company-card-stats">
+      <div><span class="k">Электр (ойлик, жами)</span><span class="v">${fmt(f.electricity_tariff)}</span></div>
+      <div><span class="k">Ким киритган</span><span class="v">${esc(f.created_by_name||'—')}</span></div>
+    </div>
+  `);
+}
 
 function tplBenzinDaily(role){
   const canEdit = role==='operator' || role==='ceo';
@@ -2995,8 +3144,20 @@ function benzinMonthlySeries(){
 // ер солиғи — ҳали икки станцияга бўлинмаган) — шунинг учун булар
 // ҚЎШИЛМАЙДИ, алоҳида-алоҳида кўрсатилади.
 // ============================================================
+function goToStationTab(station, tabId){ currentStation = station; activeTab = tabId; renderShell(); }
 function tplDashboard(){
   return `
+  <div class="card">
+    <div class="section-title"><h2>Тезкор амаллар</h2></div>
+    <p class="hint">Харажат ёки тўлов киритиш учун тўғридан-тўғри ўтинг — станция танлашни кутиш шарт эмас.</p>
+    <div class="row">
+      <button class="btn small" onclick="goToStationTab('metan','expenses')">💸 Метан — харажат киритиш</button>
+      <button class="btn small" onclick="goToStationTab('metan','companies')">🏢 Метан — компания тўлови</button>
+      <button class="btn small" onclick="goToStationTab('benzin','bz_expenses')">💸 Бензин — харажат киритиш</button>
+      <button class="btn secondary small" onclick="goToStationTab('metan','gap')">💰 Фарқ фонди</button>
+    </div>
+  </div>
+  ${lowBalanceCardHtml()}
   <div class="card">
     <div class="section-title"><h2>Умумий ҳолат</h2>
       <input type="month" id="dash_month" value="${currentMonthKey()}" style="width:auto">
