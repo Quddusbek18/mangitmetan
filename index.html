@@ -56,8 +56,8 @@ h3{font-size:.76rem;color:var(--muted);text-transform:uppercase;letter-spacing:.
 .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px}
 .who{font-size:.8rem;color:var(--muted)}
 .tabs{display:flex;gap:4px;margin-bottom:18px;flex-wrap:wrap;position:sticky;top:0;background:var(--bg);padding:6px;border-radius:var(--r-md);z-index:5;border:1px solid var(--border)}
-.tab-btn{padding:8px 13px;border-radius:var(--r-sm);border:none;background:transparent;color:var(--muted);font-size:.85rem;font-weight:700;cursor:pointer;transition:background .15s,color .15s}
-.tab-btn:hover{background:var(--surface-2);color:var(--fg)}
+.tab-btn{padding:8px 13px;border-radius:var(--r-sm);border:none;background:transparent;color:var(--grp-color,var(--muted));font-size:.85rem;font-weight:700;cursor:pointer;transition:background .15s,color .15s}
+.tab-btn:hover{background:var(--surface-2)}
 .tab-btn.active{background:var(--accent);color:var(--accent-fg);box-shadow:var(--shadow-sm)}
 .tab-btn.active:hover{background:var(--accent-hover)}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:18px;margin-bottom:14px;box-shadow:var(--shadow-sm)}
@@ -179,9 +179,17 @@ tbody tr:hover td{background:var(--surface-2)}
 /* Пастки навигация панели — мобил иловаларга хос, экраннинг тубида
    доим тура­диган 4-5 тугма. Эски юқори "табс" қатори ўрнига. */
 .bottomnav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--surface);border-top:1px solid var(--border);padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px)) 4px;z-index:40;box-shadow:0 -2px 14px rgba(0,0,0,.06)}
-.bottomnav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:none;border:none;padding:6px 2px 5px;color:var(--muted);font-size:.68rem;font-weight:700;border-radius:12px;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.bottomnav-btn.active{color:var(--accent)}
+.bottomnav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:none;border:none;padding:6px 2px 5px;color:var(--grp-color,var(--muted));font-size:.68rem;font-weight:700;border-radius:12px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.bottomnav-btn.active{color:var(--accent);background:var(--accent-wash)}
 .bottomnav-btn .tab-icon{width:22px;height:22px}
+/* Табларни гуруҳига қараб рангли қилиш (Бош саҳифа катакчалари билан бир хил
+   рамка) — операторлар ва CEO/директор бир қарашда "бу иш қисми", "бу ҳисобот",
+   "бу бошқарув" эканини рангидан ҳам билиб олсин. */
+.grp-work{--grp-color:#9a6611}
+.grp-overview{--grp-color:var(--navy)}
+.grp-reports{--grp-color:var(--accent)}
+.grp-manage{--grp-color:#7c3aed}
+.grp-system{--grp-color:var(--muted)}
 #tabBody{padding-bottom:84px}
 #tabsRow{display:none}
 @media (min-width:720px){
@@ -206,6 +214,43 @@ tbody tr:hover td{background:var(--surface-2)}
 .nav-tile-icon.manage{background:#7c3aed1f;color:#7c3aed}
 .nav-tile-icon.system{background:var(--surface-2);color:var(--muted)}
 .nav-tile-label{font-size:.82rem;font-weight:700;line-height:1.25}
+.nav-group{margin-bottom:24px}
+.nav-group-title{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;font-weight:800;margin:0 0 10px 2px;color:var(--grp-color,var(--muted))}
+
+/* CEO/директор "Умумий ҳолат" ландинг экранидаги станция карточкалари ва
+   тезкор амаллар — Бош саҳифа катакчалари билан бир хил ранг тизими. */
+.station-overview{display:grid;grid-template-columns:1fr;gap:12px}
+@media (min-width:560px){.station-overview{grid-template-columns:1fr 1fr}}
+.station-ov-card{display:flex;align-items:center;gap:14px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-lg);padding:16px}
+.station-ov-icon{flex-shrink:0;width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center}
+.station-ov-icon.work{background:var(--gold-wash);color:#9a6611}
+.station-ov-icon.reports{background:var(--accent-wash);color:var(--accent)}
+.station-ov-body{min-width:0}
+.station-ov-name{font-weight:800;font-size:.95rem}
+.station-ov-label{font-size:.72rem;color:var(--muted);margin-top:2px}
+.station-ov-value{font-family:var(--font-mono);font-weight:800;font-size:1.1rem;font-variant-numeric:tabular-nums;margin-top:2px}
+
+.quick-action-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+@media (min-width:560px){.quick-action-grid{grid-template-columns:repeat(4,1fr)}}
+.quick-action-btn{display:flex;flex-direction:column;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 8px;cursor:pointer;text-align:center;font-size:.78rem;font-weight:700;color:var(--fg);-webkit-tap-highlight-color:transparent;transition:box-shadow .15s,border-color .15s}
+.quick-action-btn:hover{box-shadow:var(--shadow-md);border-color:var(--accent)}
+.quick-action-icon{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center}
+.quick-action-icon.work{background:var(--gold-wash);color:#9a6611}
+.quick-action-icon.reports{background:var(--accent-wash);color:var(--accent)}
+.quick-action-icon.manage{background:#7c3aed1f;color:#7c3aed}
+.quick-action-icon svg,.station-ov-icon svg{width:22px;height:22px}
+
+/* Узун формаларда (масалан кунлик ҳисобот) пастга тушиб кетгандан кейин
+   тепага тезда қайтиш учун сузувчи тугма — пастки навигация устида. */
+.scroll-top-btn{position:fixed;right:16px;bottom:96px;width:46px;height:46px;border-radius:50%;border:none;background:var(--accent);color:var(--accent-fg);box-shadow:var(--shadow-lift);z-index:39;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;pointer-events:none;transform:translateY(8px);transition:opacity .2s,transform .2s}
+.scroll-top-btn.visible{opacity:1;pointer-events:auto;transform:translateY(0)}
+@media (min-width:720px){.scroll-top-btn{bottom:24px}}
+
+/* Кунлик ҳисобот каби узун формаларда — асосий хулоса (сотилган ҳажм,
+   сумма, нақт) доим кўриниб турсин, пастга тушганда ҳам тепага қайта
+   қайтиш шарт бўлмасин. */
+.entry-summary-sticky{position:sticky;top:6px;z-index:12;border:1.5px solid var(--accent);box-shadow:var(--shadow-md);padding:12px 14px}
+.entry-summary-sticky .tile-row{margin:0}
 
 /* Пастдан чиқадиган "sheet" — мобилда қаторнинг/карточканинг ичига
    "кириш"ни ҳис қилдирадиган модал. Телефонда тўлиқ пастдан, катта
@@ -789,6 +834,15 @@ function updateConnBadge(){
 window.addEventListener('online', updateConnBadge);
 window.addEventListener('offline', updateConnBadge);
 
+// Узун саҳифаларда (кунлик ҳисобот ва ҳ.к.) анча пастга тушиб кетилганда
+// тепага қайтиш тугмасини кўрсатиш — ҳар доим қайта renderShell() қилинса
+// ҳам битта global listener етарли (элемент ҳар сафар қайта сўралади).
+window.addEventListener('scroll', ()=>{
+  const btn = document.getElementById('scrollTopBtn');
+  if(!btn) return;
+  if(window.scrollY > 260) btn.classList.add('visible'); else btn.classList.remove('visible');
+}, { passive: true });
+
 // currentStation === null -> ҳали танланмаган (фақат profile.station==='both'
 // бўлганларда рўй беради) -> танлов экрани кўрсатилади.
 // Жорий роль/станция учун "Бош саҳифа" катакчаларида кўрсатилиши керак
@@ -819,11 +873,14 @@ function renderShell(){
     <div id="offlineBanner"></div>
     <div class="tabs" id="tabsRow"></div>
     <div id="tabBody"></div>
+    <button class="scroll-top-btn" id="scrollTopBtn" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="Тепага">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
+    </button>
     <div class="bottomnav" id="bottomNav"></div>`;
   document.getElementById('tabsRow').innerHTML = tabs.map(([id,label])=>
-    `<button class="tab-btn ${id===activeTab?'active':''}" onclick="switchTab('${id}')" style="display:flex;align-items:center;gap:6px">${tabIconSvg(id)}<span>${esc(stripEmoji(label))}</span></button>`).join('');
+    `<button class="tab-btn grp-${tabGroupColor(id)} ${id===activeTab?'active':''}" onclick="switchTab('${id}')" style="display:flex;align-items:center;gap:6px">${tabIconSvg(id)}<span>${esc(stripEmoji(label))}</span></button>`).join('');
   const navButtons = nav.quick.map(([id,label])=>
-    `<button class="bottomnav-btn ${id===activeTab?'active':''}" onclick="switchTab('${id}')">${tabIconSvg(id)}<span>${esc(stripEmoji(label))}</span></button>`).join('');
+    `<button class="bottomnav-btn grp-${tabGroupColor(id)} ${id===activeTab?'active':''}" onclick="switchTab('${id}')">${tabIconSvg(id)}<span>${esc(stripEmoji(label))}</span></button>`).join('');
   const homeBtn = nav.hasHome ? `<button class="bottomnav-btn ${activeTab==='home'?'active':''}" onclick="switchTab('home')"><svg class="tab-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg><span>Бош саҳифа</span></button>` : '';
   document.getElementById('bottomNav').innerHTML = navButtons + homeBtn;
   renderOfflineBanner();
@@ -833,17 +890,28 @@ function renderShell(){
 // ҳаммасини йирик, осон топиладиган icon-badge катакчалар орқали
 // кўрсатади (Soliq-иловаси каби). Худди choice-card каби, лекин
 // тур (grid) кўринишида — экранга сиғиши учун.
+// Гуруҳ номлари ва тартиби — "Бош саҳифа" экранида таблар алоҳида-алоҳида
+// сарлавҳалар остида кўрсатилади (худди молиявий иловаларга хос "Кунлик
+// иш / Умумий / Ҳисоботлар / Бошқарув / Созламалар" бўлиниши каби).
+const GROUP_LABELS = {work:'Кунлик иш', overview:'Умумий', reports:'Ҳисоботлар', manage:'Бошқарув', system:'Созламалар', other:'Бошқа'};
+const GROUP_ORDER = ['work','overview','reports','manage','system','other'];
 function tplHomeGrid(tabs){
-  const tiles = tabs.map(([id,label])=>{
-    const grp = tabGroupColor(id);
-    return `<button class="nav-tile" onclick="switchTab('${id}')">
-      <span class="nav-tile-icon ${grp}">${tabIconSvg(id).replace('class="tab-icon"','')}</span>
-      <span class="nav-tile-label">${esc(stripEmoji(label))}</span>
-    </button>`;
+  const byGroup = {};
+  tabs.forEach(t=>{ const g = tabGroupColor(t[0]); (byGroup[g]=byGroup[g]||[]).push(t); });
+  const sections = GROUP_ORDER.filter(g=>byGroup[g] && byGroup[g].length).map(g=>{
+    const items = byGroup[g].map(([id,label])=>`
+      <button class="nav-tile" onclick="switchTab('${id}')">
+        <span class="nav-tile-icon ${g}">${tabIconSvg(id).replace('class="tab-icon"','')}</span>
+        <span class="nav-tile-label">${esc(stripEmoji(label))}</span>
+      </button>`).join('');
+    return `<div class="nav-group">
+      <h3 class="nav-group-title grp-${g}">${GROUP_LABELS[g]}</h3>
+      <div class="nav-grid">${items}</div>
+    </div>`;
   }).join('');
   return `<h2 style="margin-top:4px">Бош саҳифа</h2>
   <p class="hint" style="margin-bottom:16px">Керакли бўлимни танланг.</p>
-  <div class="nav-grid">${tiles}</div>`;
+  ${sections}`;
 }
 // Рўйхатдан ўтгандан кейинги (ёки станция алмаштиргандаги) танлов экрани.
 // 'Умумий ҳолат' иконкаси фақат директор/CEO'га кўринади.
@@ -1264,6 +1332,13 @@ function tplEntry(){
     <div id="f_dateWarn"></div>
     <p class="hint">Оператор исми сизнинг ҳисобингиздан автоматик олинади — ким киритганини аниқ билиш учун.</p>
   </div>
+  <div class="card entry-summary-sticky">
+    <div class="tile-row">
+      <div class="tile"><div class="label">Сотилган m3</div><div class="value" id="calcSoldM3">—</div></div>
+      <div class="tile"><div class="label">Сотув суммаси</div><div class="value" id="calcSalesValue">—</div></div>
+      <div class="tile"><div class="label">Нақт (автоматик)</div><div class="value good" id="calcNaqt">—</div></div>
+    </div>
+  </div>
   <div class="card">
     <h2>Помпалар — ҳозирги кўрсаткич (m3)</h2>
     <p class="hint">Олдинги кўрсаткич қавс ичида — шундан катта рақам киритинг.</p>
@@ -1280,12 +1355,7 @@ function tplEntry(){
       <div class="field"><label>HUMO</label><input type="number" id="f_humo" step="1" value="0"></div>
       <div class="field"><label>QR тўлов</label><input type="number" id="f_qr" step="1" value="0"></div>
     </div>
-    <div class="tile-row" style="margin-top:6px">
-      <div class="tile"><div class="label">Сотилган m3</div><div class="value" id="calcSoldM3">—</div></div>
-      <div class="tile"><div class="label">Сотув суммаси</div><div class="value" id="calcSalesValue">—</div></div>
-      <div class="tile"><div class="label">Нақт (автоматик)</div><div class="value good" id="calcNaqt">—</div></div>
-    </div>
-    <p class="hint">Нақт = Сотув суммаси − UZCARD − HUMO − QR.</p>
+    <p class="hint">Нақт = Сотув суммаси − UZCARD − HUMO − QR (тепадаги хулоса панелида кўринади).</p>
   </div>
   <div class="card">
     <div class="section-title"><h2>Компанияларга берилган газ</h2></div>
@@ -3214,6 +3284,9 @@ function tplBenzinDaily(role){
     </div>
     <div id="bz_dateWarn"></div>
   </div>
+  <div class="card entry-summary-sticky">
+    <div class="tile-row" id="bzPreviewTiles"></div>
+  </div>
   <div class="card">
     <h2>Калонкалар — ҳозирги кўрсаткич (литр)</h2>
     <p class="hint">Олдинги кўрсаткич қавс ичида.</p>
@@ -3221,7 +3294,6 @@ function tplBenzinDaily(role){
       ${activeDispensers.map(d=>`<div class="field"><label>${esc(d.name)} — ${esc(fuelTypeName(d.fuel_type_id))} (олдинги: ${fmt(dispenserBaseline(d.id))})</label>
         <input type="number" step="0.01" id="bz_disp_${d.id}" data-fuel="${d.fuel_type_id}" placeholder="ҳозирги кўрсаткич"></div>`).join('')}
     </div>
-    <div class="tile-row" style="margin-top:6px" id="bzPreviewTiles"></div>
   </div>
   <div class="card">
     <h2>Тўлов турлари (сўм)</h2>
@@ -3423,16 +3495,53 @@ function benzinMonthlySeries(){
 // ҚЎШИЛМАЙДИ, алоҳида-алоҳида кўрсатилади.
 // ============================================================
 function goToStationTab(station, tabId){ currentStation = station; activeTab = tabId; renderShell(); }
+// Станция-иконкалар — Тезкор амаллар ва "Business Overview" карточкаларида
+// (линия-услуб, бошқа иконкалар билан бир хил чизиқ қалинлиги).
+const STATION_ICON_FLAME = '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>';
+const STATION_ICON_FUEL = '<line x1="3" y1="22" x2="15" y2="22"/><line x1="4" y1="9" x2="14" y2="9"/><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 4 0V9.83a2 2 0 0 0-.59-1.42L18.17 5.5"/><circle cx="7" cy="5" r="1"/>';
+function stationIconSvg(path){ return `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`; }
 function tplDashboard(){
+  const monthStr = currentMonthKey();
+  const mPL = computeMonthlyPL(monthStr);
+  const bPL = computeBenzinMonthlyPL(monthStr);
+  const gapBal = gapBalance();
   return `
+  <div class="card">
+    <div class="section-title"><h2>Бизнес кўриниши — шу ой</h2></div>
+    <div class="station-overview">
+      <div class="station-ov-card">
+        <span class="station-ov-icon work">${stationIconSvg(STATION_ICON_FLAME)}</span>
+        <div class="station-ov-body">
+          <div class="station-ov-name">Метан станцияси</div>
+          <div class="station-ov-label">Шу ой — соф фойда</div>
+          <div class="station-ov-value ${mPL.netProfit<0?'bad':'good'}">${fmt(mPL.netProfit)} сўм</div>
+        </div>
+      </div>
+      <div class="station-ov-card">
+        <span class="station-ov-icon reports">${stationIconSvg(STATION_ICON_FUEL)}</span>
+        <div class="station-ov-body">
+          <div class="station-ov-name">Бензин станцияси</div>
+          <div class="station-ov-label">Шу ой — ялпи фойда</div>
+          <div class="station-ov-value ${bPL.grossProfit<0?'bad':'good'}">${fmt(bPL.grossProfit)} сўм</div>
+        </div>
+      </div>
+    </div>
+    <p class="hint" style="margin-top:10px">Метан — СОФ фойда (ҳамма харажат/солиқдан кейин), Бензин — ҳозирча ЯЛПИ фойда (умумий харажатлар ҳали иккита станцияга бўлинмаган). Шунинг учун бу иккиси қўшилмайди, алоҳида кўрсатилади.</p>
+  </div>
   <div class="card">
     <div class="section-title"><h2>Тезкор амаллар</h2></div>
     <p class="hint">Харажат ёки тўлов киритиш учун тўғридан-тўғри ўтинг — станция танлашни кутиш шарт эмас.</p>
-    <div class="row">
-      <button class="btn small" onclick="goToStationTab('metan','expenses')">💸 Метан — харажат киритиш</button>
-      <button class="btn small" onclick="goToStationTab('metan','companies')">🏢 Метан — компания тўлови</button>
-      <button class="btn small" onclick="goToStationTab('benzin','bz_expenses')">💸 Бензин — харажат киритиш</button>
-      <button class="btn secondary small" onclick="goToStationTab('metan','gap')">💰 Фарқ фонди</button>
+    <div class="quick-action-grid">
+      <button class="quick-action-btn" onclick="goToStationTab('metan','expenses')"><span class="quick-action-icon work">${tabIconSvg('expenses').replace('class="tab-icon"','')}</span><span>Метан харажат</span></button>
+      <button class="quick-action-btn" onclick="goToStationTab('metan','companies')"><span class="quick-action-icon manage">${tabIconSvg('companies').replace('class="tab-icon"','')}</span><span>Компания тўлови</span></button>
+      <button class="quick-action-btn" onclick="goToStationTab('benzin','bz_expenses')"><span class="quick-action-icon work">${tabIconSvg('bz_expenses').replace('class="tab-icon"','')}</span><span>Бензин харажат</span></button>
+      <button class="quick-action-btn" onclick="goToStationTab('metan','gap')"><span class="quick-action-icon reports">${tabIconSvg('gap').replace('class="tab-icon"','')}</span><span>Фарқ фонди</span></button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="section-title"><h2>Қолдиқлар</h2></div>
+    <div class="tile-row">
+      <div class="tile"><div class="label">Фарқ фонди қолдиғи</div><div class="value ${gapBal<0?'bad':'good'}">${fmt(gapBal)} сўм</div></div>
     </div>
   </div>
   ${lowBalanceCardHtml()}
