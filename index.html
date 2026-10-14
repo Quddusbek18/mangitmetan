@@ -461,38 +461,18 @@ window.addEventListener('online', syncOfflineQueue);
 // ============================================================
 // AUTH
 // ============================================================
-// Хавфсизлик учун: бир логин 5 соатдан кейин АВТОМАТИК чиқиб кетади —
-// акс ҳолда кейинги оператор ўтган кишининг эски логида қолиб кетиши
-// мумкин (умумий компьютер/телефонда).
-const SESSION_MAX_MS = 5 * 60 * 60 * 1000;
-function sessionExpired(){
-  const t = Number(localStorage.getItem('mm_login_at'))||0;
-  return t>0 && (Date.now()-t) > SESSION_MAX_MS;
-}
 async function boot(){
   const { data:{ session } } = await sb.auth.getSession();
-  if(session && sessionExpired()){
-    await sb.auth.signOut();
-    renderLogin();
-    document.getElementById('loginErr').textContent = '5 соатдан кейин автоматик чиқиб кетилди — қайта киринг';
-  } else if(session){
+  if(session){
     await afterLogin(session);
   } else {
     renderLogin();
   }
 
   sb.auth.onAuthStateChange((event, session)=>{
-    if(event === 'SIGNED_OUT'){ localStorage.removeItem('mm_login_at'); state = {session:null, profile:null, companies:[],prices:[],taxRates:[],fixedCosts:[],prepayments:[],otherExpenses:[],entries:[],deliveries:[],payments:[],
+    if(event === 'SIGNED_OUT'){ state = {session:null, profile:null, companies:[],prices:[],taxRates:[],fixedCosts:[],prepayments:[],otherExpenses:[],entries:[],deliveries:[],payments:[],
       fuelTypes:[],fuelPrices:[],dispensers:[],benzinEntries:[],benzinCompanySales:[],benzinDeliveries:[],employees:[],employeeSalaries:[],gapLedger:[],entryEditLog:[],bankTx:[],projectNotes:[]}; renderLogin(); }
   });
-
-  // Очиқ турган саҳифада ҳам 5 соат тўлганда автоматик чиқариб юбориш
-  // (саҳифани қайта юкламаса ҳам) — ҳар дақиқада текширади.
-  setInterval(()=>{
-    if(state.session && sessionExpired()){
-      sb.auth.signOut().then(()=>{ toast("5 соатдан кейин автоматик чиқиб кетилди"); });
-    }
-  }, 60*1000);
 }
 
 // Операторлар учун ҳақиқий email очиш шарт эмас — "логин" (username)
@@ -526,7 +506,6 @@ async function doLogin(){
   const { data, error } = await sb.auth.signInWithPassword({ email, password });
   btn.disabled = false; btn.textContent = 'Кириш';
   if(error){ document.getElementById('loginErr').textContent = 'Логин ёки парол хато'; return; }
-  localStorage.setItem('mm_login_at', String(Date.now()));
   await afterLogin(data.session);
 }
 
@@ -881,23 +860,11 @@ function renderStationPicker(){
     </div>
     <div class="card" style="padding:24px 18px">
       <h2 style="margin-top:0">Қайси станция?</h2>
-      <p class="hint">Ишлайдиган бўлимни танланг — ҳар бирининг ҳисоботи алоҳида.</p>
-      <div class="choice-list">
-        <button class="choice-card" onclick="chooseStation('metan')">
-          <span class="choice-icon gold">🔥</span>
-          <span class="choice-text"><span class="choice-title">Метан</span><span class="choice-sub">Метан станцияси — кунлик ҳисобот, харажатлар, компаниялар</span></span>
-          <span class="choice-chevron">›</span>
-        </button>
-        <button class="choice-card" onclick="chooseStation('benzin')">
-          <span class="choice-icon">⛽</span>
-          <span class="choice-text"><span class="choice-title">Бензин</span><span class="choice-sub">Бензин станцияси — кунлик ҳисобот, харажатлар</span></span>
-          <span class="choice-chevron">›</span>
-        </button>
-        ${showUmumiy ? `<button class="choice-card" onclick="chooseStation('umumiy')">
-          <span class="choice-icon" style="background:var(--navy-wash);color:var(--navy)">📊</span>
-          <span class="choice-text"><span class="choice-title">Умумий ҳолат</span><span class="choice-sub">Иккала станция бирга — молиявий умумий кўриниш</span></span>
-          <span class="choice-chevron">›</span>
-        </button>` : ''}
+      <p class="hint">Ишлайдиган бўлимни танланг.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+        <button class="btn" onclick="chooseStation('metan')">🔥 Метан</button>
+        <button class="btn" onclick="chooseStation('benzin')">⛽ Бензин</button>
+        ${showUmumiy ? `<button class="btn secondary" onclick="chooseStation('umumiy')">📊 Умумий ҳолат</button>` : ''}
       </div>
     </div>`;
 }
