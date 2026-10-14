@@ -163,6 +163,19 @@ tbody tr:hover td{background:var(--surface-2)}
 .add-fab:hover{background:var(--accent-hover)}
 .section-title{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 
+/* Станция/катта танлов экрани — кичик тугмалар эмас, катта, аниқ
+   кўринадиган, тўлиқ энли карточкалар (топилмай қолмаслиги учун). */
+.choice-list{display:flex;flex-direction:column;gap:14px;margin-top:22px}
+.choice-card{display:flex;align-items:center;gap:16px;width:100%;padding:20px 20px;border-radius:var(--r-lg);border:1.5px solid var(--border);background:var(--surface-2);cursor:pointer;text-align:left;font-family:inherit;color:inherit;-webkit-tap-highlight-color:transparent;transition:box-shadow .15s,border-color .15s,transform .1s}
+.choice-card:hover{box-shadow:var(--shadow-md);border-color:var(--accent)}
+.choice-card:active{transform:scale(.98)}
+.choice-icon{flex-shrink:0;width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.7rem;background:var(--accent-wash)}
+.choice-icon.gold{background:var(--gold-wash)}
+.choice-text{flex:1;display:flex;flex-direction:column;gap:3px;min-width:0}
+.choice-title{font-weight:800;font-size:1.15rem;line-height:1.2}
+.choice-sub{color:var(--muted);font-size:.82rem}
+.choice-chevron{color:var(--muted);font-size:1.6rem;flex-shrink:0}
+
 /* Пастдан чиқадиган "sheet" — мобилда қаторнинг/карточканинг ичига
    "кириш"ни ҳис қилдирадиган модал. Телефонда тўлиқ пастдан, катта
    экранда марказда дialog сифатида очилади. */
@@ -594,13 +607,25 @@ function renderStationPicker(){
       </div>
       <button class="btn secondary small" onclick="doLogout()">Чиқиш</button>
     </div>
-    <div class="card" style="text-align:center;padding:28px 16px">
+    <div class="card" style="padding:24px 18px">
       <h2 style="margin-top:0">Қайси станция?</h2>
       <p class="hint">Ишлайдиган бўлимни танланг — ҳар бирининг ҳисоботи алоҳида.</p>
-      <div class="row" style="justify-content:center;flex-wrap:wrap;gap:16px;margin-top:20px">
-        <button class="btn" style="min-width:160px;padding:26px 18px;font-size:1.1rem" onclick="chooseStation('metan')">🔥<br>Метан</button>
-        <button class="btn" style="min-width:160px;padding:26px 18px;font-size:1.1rem" onclick="chooseStation('benzin')">⛽<br>Бензин</button>
-        ${showUmumiy ? `<button class="btn secondary" style="min-width:160px;padding:26px 18px;font-size:1.1rem" onclick="chooseStation('umumiy')">📊<br>Умумий ҳолат</button>` : ''}
+      <div class="choice-list">
+        <button class="choice-card" onclick="chooseStation('metan')">
+          <span class="choice-icon gold">🔥</span>
+          <span class="choice-text"><span class="choice-title">Метан</span><span class="choice-sub">Метан станцияси — кунлик ҳисобот, харажатлар, компаниялар</span></span>
+          <span class="choice-chevron">›</span>
+        </button>
+        <button class="choice-card" onclick="chooseStation('benzin')">
+          <span class="choice-icon">⛽</span>
+          <span class="choice-text"><span class="choice-title">Бензин</span><span class="choice-sub">Бензин станцияси — кунлик ҳисобот, харажатлар</span></span>
+          <span class="choice-chevron">›</span>
+        </button>
+        ${showUmumiy ? `<button class="choice-card" onclick="chooseStation('umumiy')">
+          <span class="choice-icon" style="background:var(--navy-wash);color:var(--navy)">📊</span>
+          <span class="choice-text"><span class="choice-title">Умумий ҳолат</span><span class="choice-sub">Иккала станция бирга — молиявий умумий кўриниш</span></span>
+          <span class="choice-chevron">›</span>
+        </button>` : ''}
       </div>
     </div>`;
 }
@@ -634,7 +659,7 @@ function renderTab(){
 }
 function afterRenderTab(){
   if(activeTab==='entry'){
-    buildPumpFields(); buildCompanySelects(); renderPendingLists(); recalcPreview();
+    buildPumpFields(); renderDeliveryGrid(); recalcPreview();
     document.getElementById('f_date').value = todayISO();
     updateEntryDateWarning('metan');
   }
@@ -1024,12 +1049,8 @@ function tplEntry(){
   </div>
   <div class="card">
     <div class="section-title"><h2>Компанияларга берилган газ</h2></div>
-    <div id="deliveryList"></div>
-    <div class="row" style="margin-top:8px">
-      <div class="field" style="flex:2"><select id="delCompany"></select></div>
-      <div class="field"><input type="number" id="delM3" placeholder="m3" step="0.01"></div>
-      <div class="field" style="flex:0 0 auto"><button class="btn secondary small" onclick="addDelivery()">+ Қўшиш</button></div>
-    </div>
+    <p class="hint">Қанча m3 берилганини ёзиш учун компания устига босинг.</p>
+    <div class="company-grid" id="deliveryGrid"></div>
   </div>
   <div class="card"><h2>Изоҳ</h2><textarea id="f_izoh" placeholder="Ихтиёрий изоҳ..."></textarea></div>
   <button class="btn" id="submitBtn" style="width:100%;padding:14px" onclick="openReview()">Текшириш ва юбориш</button>`;
@@ -1065,22 +1086,42 @@ function buildPumpFields(){
       <input type="number" id="pump_${i}" step="0.01" placeholder="ҳозирги кўрсаткич"></div>`).join('');
   wrap.querySelectorAll('input').forEach(inp => inp.addEventListener('input', recalcPreview));
 }
-function buildCompanySelects(){
-  const opts = companiesForStation('metan').map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
-  document.getElementById('delCompany').innerHTML = opts;
+function renderDeliveryGrid(){
+  const grid = document.getElementById('deliveryGrid');
+  if(!grid) return;
+  const companies = companiesForStation('metan').slice().sort((a,b)=>a.name.localeCompare(b.name));
+  grid.innerHTML = companies.map(c=>{
+    const entry = pending.deliveries.find(d=>d.company_id===c.id);
+    return `<div class="company-card tappable" onclick="openDeliveryEntrySheet('${c.id}')" role="button" tabindex="0">
+      <div class="company-card-top"><div class="company-card-name">${esc(c.name)}</div></div>
+      ${entry ? `<span class="pill good">${fmt(entry.m3)} m3 қўшилди</span>` : `<div class="hint" style="margin-top:4px">Босиб киритинг →</div>`}
+    </div>`;
+  }).join('') || `<div class="empty">Ҳали компания қўшилмаган</div>`;
 }
-function addDelivery(){
-  const sel = document.getElementById('delCompany');
-  const m3 = parseFloat(document.getElementById('delM3').value);
-  if(!sel.value || !m3){ toast("Компания ва m3 киритинг"); return; }
-  pending.deliveries.push({company_id: sel.value, companyName: sel.options[sel.selectedIndex].text, m3});
-  document.getElementById('delM3').value = '';
-  renderPendingLists();
+function openDeliveryEntrySheet(companyId){
+  const c = state.companies.find(x=>x.id===companyId);
+  if(!c) return;
+  const existing = pending.deliveries.find(d=>d.company_id===companyId);
+  openSheet(`
+    <h2 style="margin-bottom:10px">${esc(c.name)}</h2>
+    <div class="field"><label>Берилган газ (m3)</label><input type="number" id="de_m3" step="0.01" value="${existing?existing.m3:''}" placeholder="масалан 120.5"></div>
+    <button class="btn" style="width:100%;margin-top:4px" onclick="saveDeliveryEntry('${companyId}')">Сақлаш</button>
+    ${existing?`<button class="btn danger small" style="width:100%;margin-top:10px" onclick="removeDeliveryEntry('${companyId}')">Ўчириш</button>`:''}
+  `);
 }
-function renderPendingLists(){
-  document.getElementById('deliveryList').innerHTML = pending.deliveries.map((d,i)=>
-    `<div class="list-item">${esc(d.companyName)} — ${fmt(d.m3)} m3 <button class="del" onclick="pending.deliveries.splice(${i},1);renderPendingLists()">✕</button></div>`
-  ).join('') || '<p class="empty">Ҳали қўшилмаган</p>';
+function saveDeliveryEntry(companyId){
+  const m3 = parseFloat(document.getElementById('de_m3').value);
+  if(!m3){ toast("m3 киритинг"); return; }
+  const c = state.companies.find(x=>x.id===companyId);
+  const existing = pending.deliveries.find(d=>d.company_id===companyId);
+  if(existing){ existing.m3 = m3; } else { pending.deliveries.push({company_id:companyId, companyName:c.name, m3}); }
+  closeSheet();
+  renderDeliveryGrid();
+}
+function removeDeliveryEntry(companyId){
+  pending.deliveries = pending.deliveries.filter(d=>d.company_id!==companyId);
+  closeSheet();
+  renderDeliveryGrid();
 }
 
 // Gathers + validates the current form. Returns null (and toasts the
@@ -2948,13 +2989,8 @@ function tplBenzinDaily(role){
   </div>
   <div class="card">
     <div class="section-title"><h2>Компанияларга сотилган бензин</h2></div>
-    <div id="bzSalesList"></div>
-    <div class="row" style="margin-top:8px">
-      <div class="field" style="flex:2"><select id="bz_sale_company"></select></div>
-      <div class="field"><select id="bz_sale_fuel">${state.fuelTypes.map(f=>`<option value="${f.id}">${esc(f.name)}</option>`).join('')}</select></div>
-      <div class="field"><input type="number" id="bz_sale_liters" placeholder="литр" step="0.01"></div>
-      <div class="field" style="flex:0 0 auto"><button class="btn secondary small" onclick="addBenzinSale()">+ Қўшиш</button></div>
-    </div>
+    <p class="hint">Қанча литр сотилганини ёзиш учун компания устига босинг.</p>
+    <div class="company-grid" id="bzSalesGrid"></div>
   </div>
   <div class="card"><h2>Изоҳ</h2><textarea id="bz_izoh" placeholder="Ихтиёрий изоҳ..."></textarea></div>
   <button class="btn" style="width:100%;padding:14px" onclick="openBenzinReview()">Текшириш ва юбориш</button>`;
@@ -3106,10 +3142,8 @@ function tplBenzinSettings(){
 }
 
 function afterRenderBenzinDaily(){
-  const sel = document.getElementById('bz_sale_company');
-  if(sel) sel.innerHTML = companiesForStation('benzin').slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
   benzinPending = { sales: [] };
-  renderBenzinSalesList();
+  renderBenzinSalesGrid();
   document.querySelectorAll('#bzDispenserFields input').forEach(inp=>inp.addEventListener('input', recalcBenzinPreview));
   recalcBenzinPreview();
 }
@@ -3242,26 +3276,60 @@ function recalcBenzinPreview(){
      <div class="tile"><div class="label">Нақд (автоматик)</div><div class="value ${naqd<0?'bad':'good'}">${fmt(naqd)}</div></div>`;
 }
 
-function addBenzinSale(){
-  const companyId = document.getElementById('bz_sale_company').value;
-  const fuelId = document.getElementById('bz_sale_fuel').value;
-  const liters = parseFloat(document.getElementById('bz_sale_liters').value);
-  if(!companyId || !liters){ toast("Компания ва литрни киритинг"); return; }
+function renderBenzinSalesGrid(){
+  const grid = document.getElementById('bzSalesGrid');
+  if(!grid) return;
+  const companies = companiesForStation('benzin').slice().sort((a,b)=>a.name.localeCompare(b.name));
+  grid.innerHTML = companies.map(c=>{
+    const sales = benzinPending.sales.filter(s=>s.company_id===c.id);
+    const totalLiters = sales.reduce((s,x)=>s+x.liters,0);
+    return `<div class="company-card tappable" onclick="openBenzinSaleSheet('${c.id}')" role="button" tabindex="0">
+      <div class="company-card-top"><div class="company-card-name">${esc(c.name)}</div></div>
+      ${sales.length?`<span class="pill good">${fmt(totalLiters)} л (${sales.length})</span>`:`<div class="hint" style="margin-top:4px">Босиб киритинг →</div>`}
+    </div>`;
+  }).join('') || `<div class="empty">Ҳали компания қўшилмаган</div>`;
+}
+function openBenzinSaleSheet(companyId){
+  const c = state.companies.find(x=>x.id===companyId);
+  if(!c) return;
+  const sales = benzinPending.sales.filter(s=>s.company_id===companyId);
+  openSheet(`
+    <h2 style="margin-bottom:10px">${esc(c.name)}</h2>
+    <div class="action-box">
+      <h3>+ Сотув қўшиш</h3>
+      <div class="row" style="margin-top:8px">
+        <div class="field"><label>Ёқилғи тури</label><select id="bzs_fuel">${state.fuelTypes.map(f=>`<option value="${f.id}">${esc(f.name)}</option>`).join('')}</select></div>
+        <div class="field"><label>Литр</label><input type="number" id="bzs_liters" step="0.01"></div>
+      </div>
+      <button class="btn" style="width:100%;margin-top:4px" onclick="addBenzinSaleFor('${companyId}')">Қўшиш</button>
+    </div>
+    <h3 style="margin-top:16px">Бугунги сотувлар</h3>
+    <div class="table-wrap" style="margin-top:8px">
+      <table><thead><tr><th>Тури</th><th>Литр</th><th>Сумма</th><th></th></tr></thead>
+      <tbody>${sales.map(s=>{
+        const idx = benzinPending.sales.indexOf(s);
+        return `<tr><td>${esc(s.fuel_name)}</td><td>${fmt(s.liters)}</td><td>${fmt(s.sum)}</td><td><button class="del" onclick="removeBenzinSale(${idx},'${companyId}')" title="Ўчириш">✕</button></td></tr>`;
+      }).join('') || `<tr><td colspan="4" class="empty">Ҳали йўқ</td></tr>`}</tbody></table>
+    </div>
+  `);
+}
+function addBenzinSaleFor(companyId){
+  const fuelId = document.getElementById('bzs_fuel').value;
+  const liters = parseFloat(document.getElementById('bzs_liters').value);
+  if(!liters){ toast("Литрни киритинг"); return; }
   const date = document.getElementById('bz_date').value || todayISO();
   const price = fuelPriceFor(fuelId, date);
-  const companyName = (state.companies.find(c=>c.id===companyId)||{}).name || '—';
-  benzinPending.sales.push({ company_id: companyId, company_name: companyName, fuel_type_id: fuelId, fuel_name: fuelTypeName(fuelId), liters, price, sum: liters*price });
-  document.getElementById('bz_sale_liters').value = '';
-  renderBenzinSalesList();
+  const c = state.companies.find(x=>x.id===companyId);
+  benzinPending.sales.push({ company_id: companyId, company_name: c.name, fuel_type_id: fuelId, fuel_name: fuelTypeName(fuelId), liters, price, sum: liters*price });
   recalcBenzinPreview();
+  renderBenzinSalesGrid();
+  openBenzinSaleSheet(companyId);
 }
-function removeBenzinSale(i){ benzinPending.sales.splice(i,1); renderBenzinSalesList(); recalcBenzinPreview(); }
-function renderBenzinSalesList(){
-  const box = document.getElementById('bzSalesList');
-  if(!box) return;
-  box.innerHTML = benzinPending.sales.length
-    ? benzinPending.sales.map((s,i)=>`<div class="list-item">${esc(s.company_name)} — ${esc(s.fuel_name)} ${fmt(s.liters)} л (${fmt(s.sum)} сўм) <button class="del" onclick="removeBenzinSale(${i})">✕</button></div>`).join('')
-    : `<p class="empty">Ҳали қўшилмаган</p>`;
+function removeBenzinSale(i, companyId){
+  benzinPending.sales.splice(i,1);
+  recalcBenzinPreview();
+  renderBenzinSalesGrid();
+  if(companyId) openBenzinSaleSheet(companyId); else closeSheet();
 }
 
 // Гатҳерс + текширади. Хато бўлса toast кўрсатиб null қайтаради.
