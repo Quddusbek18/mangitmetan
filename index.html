@@ -255,6 +255,33 @@ tbody tr:hover td{background:var(--surface-2)}
 .quick-action-icon.manage{background:var(--purple-wash);color:var(--purple)}
 .quick-action-icon svg,.station-ov-icon svg{width:22px;height:22px}
 
+/* "Бош саҳифа" (home) экранидаги катта домен-картолар — Метан/Бензин/
+   Умумий ҳисобот орасида биринчи марта кирган одам ҳам адашмасдан
+   танлай олиши учун йирик, рангли, ёрлиқли тугмалар. */
+.domain-grid{display:grid;grid-template-columns:1fr;gap:12px}
+@media (min-width:560px){.domain-grid{grid-template-columns:repeat(3,1fr)}}
+.domain-card{display:flex;flex-direction:column;align-items:flex-start;gap:8px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-lg);padding:18px 16px;cursor:pointer;text-align:left;font-family:inherit;width:100%;-webkit-tap-highlight-color:transparent;transition:box-shadow .15s,border-color .15s,transform .1s}
+.domain-card:active{transform:scale(.98)}
+.domain-card:hover{box-shadow:var(--shadow-md)}
+.domain-card-icon{width:44px;height:44px;border-radius:13px;display:flex;align-items:center;justify-content:center}
+.domain-card-icon svg{width:24px;height:24px}
+.domain-card.metan{border-left:3px solid var(--gold)}
+.domain-card.metan .domain-card-icon{background:var(--gold-wash);color:#9a6611}
+.domain-card.benzin{border-left:3px solid var(--accent)}
+.domain-card.benzin .domain-card-icon{background:var(--accent-wash);color:var(--accent)}
+.domain-card.umumiy{border-left:3px solid var(--purple)}
+.domain-card.umumiy .domain-card-icon{background:var(--purple-wash);color:var(--purple)}
+.domain-card-name{font-weight:800;font-size:1.02rem}
+.domain-card-sub{font-size:.78rem;color:var(--muted)}
+
+/* Драворда доменлар бўйича гуруҳ сарлавҳалари — Метан/Бензин/Умумий
+   аниқ ажралиб турсин учун (ҳар бирининг ўз ранги бор). */
+.drawer-group-title{display:flex;align-items:center;gap:8px;font-size:.76rem;font-weight:800;text-transform:uppercase;letter-spacing:.02em;padding:14px 18px 6px}
+.drawer-group-title.metan{color:#9a6611}
+.drawer-group-title.benzin{color:var(--accent)}
+.drawer-group-title.umumiy{color:var(--purple)}
+.drawer-group-title svg{width:15px;height:15px}
+
 /* Узун формаларда (масалан кунлик ҳисобот) пастга тушиб кетгандан кейин
    тепага тезда қайтиш учун сузувчи тугма — пастки навигация устида. */
 .scroll-top-btn{position:fixed;right:16px;bottom:96px;width:46px;height:46px;border-radius:50%;border:none;background:var(--accent);color:var(--accent-fg);box-shadow:var(--shadow-lift);z-index:39;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;pointer-events:none;transform:translateY(8px);transition:opacity .2s,transform .2s}
@@ -435,23 +462,46 @@ function userInitials(name){
 }
 function tplSideMenu(){
   const role = state.profile.role;
-  const canSwitch = (state.profile.station || 'both') === 'both';
+  const isMultiStation = (state.profile.station || 'both') === 'both';
+  const logoutBtn = `<button class="drawer-item danger" onclick="closeSideMenu();doLogout()"><svg class="tab-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg><span>Чиқиш</span></button>`;
+  const head = `
+  <div class="drawer-head">
+    <button class="drawer-close" onclick="closeSideMenu()" aria-label="Ёпиш">✕</button>
+    <div class="drawer-avatar">${esc(userInitials(state.profile.full_name))}</div>
+    <div class="drawer-name">${esc(state.profile.full_name)}</div>
+    <div class="drawer-role">${roleLabel(role)}${isMultiStation?'':' — '+(currentStation==='metan'?'Метан':(currentStation==='benzin'?'Бензин':'Умумий ҳолат'))}</div>
+  </div>`;
+  if(isMultiStation){
+    const domainGroup = (domain, title, iconSvg)=>{
+      const list = tabsForRole(role, domain);
+      if(!list.length) return '';
+      const rows = list.map(([id,label])=>
+        `<button class="drawer-item${(domain===currentStation && id===activeTab)?' active':''}" onclick="goToStationTab('${domain}','${id}');closeSideMenu()">${tabIconSvg(id)}<span>${esc(stripEmoji(label))}</span></button>`
+      ).join('');
+      return `<div class="drawer-group-title ${domain}">${iconSvg}<span>${title}</span></div>${rows}`;
+    };
+    return `
+    ${head}
+    <button class="drawer-item${currentStation==='home'?' active':''}" onclick="goHome();closeSideMenu()">${tabIconSvg('overview')||`<svg class="tab-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>`}<span>Бош саҳифа</span></button>
+    <div class="drawer-divider"></div>
+    ${domainGroup('metan','Метан', stationIconSvg(STATION_ICON_FLAME).replace('<svg ','<svg class="tab-icon" width="15" height="15" '))}
+    <div class="drawer-divider"></div>
+    ${domainGroup('benzin','Бензин', stationIconSvg(STATION_ICON_FUEL).replace('<svg ','<svg class="tab-icon" width="15" height="15" '))}
+    <div class="drawer-divider"></div>
+    ${domainGroup('umumiy','Умумий ҳисобот', `<svg class="tab-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="13" width="3" height="5"/><rect x="12" y="9" width="3" height="9"/><rect x="17" y="5" width="3" height="13"/></svg>`)}
+    <div class="drawer-divider"></div>
+    ${logoutBtn}`;
+  }
   const nav = navTabsFor(role, currentStation);
   const items = nav.all.map(([id,label])=>
     `<button class="drawer-item${id===activeTab?' active':''}" onclick="switchTab('${id}');closeSideMenu()">${tabIconSvg(id)}<span>${esc(stripEmoji(label))}</span></button>`
   ).join('');
   return `
-  <div class="drawer-head">
-    <button class="drawer-close" onclick="closeSideMenu()" aria-label="Ёпиш">✕</button>
-    <div class="drawer-avatar">${esc(userInitials(state.profile.full_name))}</div>
-    <div class="drawer-name">${esc(state.profile.full_name)}</div>
-    <div class="drawer-role">${roleLabel(role)} — ${currentStation==='metan'?'Метан':(currentStation==='benzin'?'Бензин':'Умумий ҳолат')}</div>
-  </div>
+  ${head}
   <div class="drawer-section-title">Бўлимлар</div>
   ${items}
   <div class="drawer-divider"></div>
-  ${canSwitch?`<button class="drawer-item" onclick="closeSideMenu();switchStation()"><svg class="tab-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg><span>Станцияни алмаштириш</span></button>`:''}
-  <button class="drawer-item danger" onclick="closeSideMenu();doLogout()"><svg class="tab-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg><span>Чиқиш</span></button>`;
+  ${logoutBtn}`;
 }
 function openSideMenu(){
   let backdrop = document.getElementById('drawerBackdrop');
@@ -691,14 +741,15 @@ async function afterLogin(session){
   }
   state.profile = profile;
   const station = profile.station || 'both';
-  if(station === 'both' && profile.role === 'ceo'){
-    // CEO/Owner учун: аввало станция танлаш эмас, тўғридан-тўғри умумий
-    // ҳолат (бизнеснинг энг муҳим рақамлари ва харажат киритиш тезкор
-    // тугмалари) кўринади — станция танлаш "🔁 Станция" тугмаси орқали
-    // кейин ҳам мумкин.
-    currentStation = 'umumiy';
+  if(station === 'both'){
+    // Иккала станцияга ҳам кираоладиган роллар (CEO, Директор) учун:
+    // аввало станция танлаш ЭМАС, тўғридан-тўғри енгил "Бош саҳифа"
+    // (энг муҳим рақамлар + Метан/Бензин/Умумий ҳисоботга тезкор ўтиш)
+    // кўринади — бундан кейин ҳар доим ☰ менюдан ёки пастки
+    // навигациядан исталган бўлимга бир тегиниш билан ўтиш мумкин.
+    currentStation = 'home';
   } else {
-    currentStation = (station === 'both') ? null : station; // 'both' -> танлов экранини кўрсатади
+    currentStation = station; // якка станцияли роллар (оператор ва ш.к.) — тўғридан ўз станциясига
   }
   let dataLoadFailed = false;
   try{
@@ -983,12 +1034,14 @@ window.addEventListener('scroll', ()=>{
 let homeGridTabs = [];
 function renderShell(){
   const role = state.profile.role;
+  if(currentStation === 'home'){ renderHomeShell(); return; }
   if(currentStation === null){ renderStationPicker(); return; }
   const nav = navTabsFor(role, currentStation);
   const tabs = nav.all;
   homeGridTabs = tabs;
   if(!activeTab || (activeTab!=='home' && !tabs.find(t=>t[0]===activeTab))) activeTab = tabs.length ? tabs[0][0] : null;
-  const canSwitch = (state.profile.station || 'both') === 'both';
+  const isMultiStation = (state.profile.station || 'both') === 'both';
+  const canSwitch = isMultiStation;
   const stationLabel = currentStation==='metan' ? 'Метан' : (currentStation==='benzin' ? 'Бензин' : 'Умумий ҳолат');
   document.getElementById('app').innerHTML = `
     <div class="topbar">
@@ -1011,12 +1064,101 @@ function renderShell(){
     <div class="bottomnav" id="bottomNav"></div>`;
   document.getElementById('tabsRow').innerHTML = tabs.map(([id,label])=>
     `<button class="tab-btn grp-${tabGroupColor(id)} ${id===activeTab?'active':''}" onclick="switchTab('${id}')" style="display:flex;align-items:center;gap:6px">${tabIconSvg(id)}<span>${esc(stripEmoji(label))}</span></button>`).join('');
-  const navButtons = nav.quick.map(([id,label])=>
-    `<button class="bottomnav-btn grp-${tabGroupColor(id)} ${id===activeTab?'active':''}" onclick="switchTab('${id}')">${tabIconSvg(id)}<span>${esc(stripEmoji(label))}</span></button>`).join('');
-  const homeBtn = nav.hasHome ? `<button class="bottomnav-btn ${activeTab==='home'?'active':''}" onclick="switchTab('home')"><svg class="tab-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg><span>Бош саҳифа</span></button>` : '';
-  document.getElementById('bottomNav').innerHTML = navButtons + homeBtn;
+  if(isMultiStation){
+    // Иккала станцияга кираоладиган роллар учун пастки навигация ҳар
+    // доим БИР ХИЛ 4 та "домен" тугмасидан иборат (Бош саҳифа/Метан/
+    // Бензин/Умумий ҳисобот) — қайси бўлимда турганингиздан қатъи
+    // назар жойи ўзгармайди, шу билан дракордаги тўлиқ рўйхатни
+    // ТАКРОРЛАМАЙДИ (у ерда ҳар доменнинг ичидаги барча экранлар бор).
+    document.getElementById('bottomNav').innerHTML = domainNavButtonsHtml(currentStation);
+  } else {
+    const navButtons = nav.quick.map(([id,label])=>
+      `<button class="bottomnav-btn grp-${tabGroupColor(id)} ${id===activeTab?'active':''}" onclick="switchTab('${id}')">${tabIconSvg(id)}<span>${esc(stripEmoji(label))}</span></button>`).join('');
+    const homeBtn = nav.hasHome ? `<button class="bottomnav-btn ${activeTab==='home'?'active':''}" onclick="switchTab('home')"><svg class="tab-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg><span>Бош саҳифа</span></button>` : '';
+    document.getElementById('bottomNav').innerHTML = navButtons + homeBtn;
+  }
   renderOfflineBanner();
   renderTab();
+}
+// Иккала станцияга кираоладиган роллар учун ҳар доим бир хил 4 та
+// "домен" тугмаси (Бош саҳифа/Метан/Бензин/Умумий) — ҳар бири ўз
+// доменининг "тезкор" (QUICK_TABS'даги биринчи) табига олиб боради.
+function domainNavButtonsHtml(activeDomain){
+  const role = state.profile.role;
+  const metanDef = navTabsFor(role,'metan').quick[0][0];
+  const benzinDef = navTabsFor(role,'benzin').quick[0][0];
+  const homeIcon = `<svg class="tab-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>`;
+  const items = [
+    { key:'home', grp:'overview', label:'Бош саҳифа', onclick:`goHome()`, icon:homeIcon },
+    { key:'metan', grp:'work', label:'Метан', onclick:`goToStationTab('metan','${metanDef}')`, icon: stationIconSvg(STATION_ICON_FLAME).replace('width="24" height="24"','class="tab-icon" width="22" height="22"') },
+    { key:'benzin', grp:'reports', label:'Бензин', onclick:`goToStationTab('benzin','${benzinDef}')`, icon: stationIconSvg(STATION_ICON_FUEL).replace('width="24" height="24"','class="tab-icon" width="22" height="22"') },
+    { key:'umumiy', grp:'manage', label:'Умумий ҳисобот', onclick:`goToStationTab('umumiy','dashboard')`, icon: tabIconSvg('dashboard') },
+  ];
+  return items.map(it=>`<button class="bottomnav-btn grp-${it.grp} ${it.key===activeDomain?'active':''}" onclick="${it.onclick}">${it.icon}<span>${esc(it.label)}</span></button>`).join('');
+}
+function goHome(){ currentStation='home'; activeTab=null; renderShell(); }
+// Енгил "Бош саҳифа" — currentStation==='home' бўлганда кўринади.
+// Оддий tabsForRole/navTabsFor механизмидан ТАШҚАРИДА, алоҳида
+// ишлайди (чунки бу бирорта станциянинг ичидаги таб эмас, балки
+// станциялар ўртасидаги юқори даражадаги "домен танлаш" экрани).
+function renderHomeShell(){
+  const role = state.profile.role;
+  document.getElementById('app').innerHTML = `
+    <div class="topbar">
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="menu-btn" onclick="openSideMenu()" aria-label="Меню">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+        </button>
+        <div><h1 style="margin-bottom:0">Мангит Метан</h1><p class="who">${esc(state.profile.full_name)} — ${roleLabel(role)}</p></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span id="connBadge">${connectivityBadgeHtml()}</span>
+      </div>
+    </div>
+    <div id="offlineBanner"></div>
+    <div id="tabBody">${tplHomeLight()}</div>
+    <button class="scroll-top-btn" id="scrollTopBtn" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="Тепага">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
+    </button>
+    <div class="bottomnav" id="bottomNav"></div>`;
+  document.getElementById('bottomNav').innerHTML = domainNavButtonsHtml('home');
+  renderOfflineBanner();
+  afterRenderTab();
+}
+// Бош саҳифа мазмуни — "фақат керакли маълумотлар": икки станциянинг
+// шу ойги натижаси, фарқ фонди қолдиғи, қарздор компаниялар огоҳлантириши,
+// ва 3 та катта тугма орқали тўғридан исталган бўлимга ўтиш.
+function tplHomeLight(){
+  const role = state.profile.role;
+  const monthStr = currentMonthKey();
+  const mPL = computeMonthlyPL(monthStr);
+  const bPL = computeBenzinMonthlyPL(monthStr);
+  const gapBal = gapBalance();
+  const metanDef = navTabsFor(role,'metan').quick[0][0];
+  const benzinDef = navTabsFor(role,'benzin').quick[0][0];
+  return `
+  <div class="domain-grid" style="margin-top:4px">
+    <button class="domain-card metan" onclick="goToStationTab('metan','${metanDef}')">
+      <span class="domain-card-icon">${stationIconSvg(STATION_ICON_FLAME)}</span>
+      <span class="domain-card-name">Метан</span>
+      <span class="domain-card-sub">Шу ой — ${mPL.netProfit<0?'зарар':'соф фойда'}: ${fmt(mPL.netProfit)} сўм</span>
+    </button>
+    <button class="domain-card benzin" onclick="goToStationTab('benzin','${benzinDef}')">
+      <span class="domain-card-icon">${stationIconSvg(STATION_ICON_FUEL)}</span>
+      <span class="domain-card-name">Бензин</span>
+      <span class="domain-card-sub">Шу ой — ${bPL.grossProfit<0?'зарар':'ялпи фойда'}: ${fmt(bPL.grossProfit)} сўм</span>
+    </button>
+    <button class="domain-card umumiy" onclick="goToStationTab('umumiy','dashboard')">
+      <span class="domain-card-icon">${tabIconSvg('dashboard').replace('class="tab-icon"','')}</span>
+      <span class="domain-card-name">Умумий ҳисобот</span>
+      <span class="domain-card-sub">Тўлиқ молиявий кўриниш, Excel экспорт</span>
+    </button>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <div class="section-title"><h2>Қолдиқлар</h2></div>
+    <div class="tile-row"><div class="tile"><div class="label">Фарқ фонди қолдиғи</div><div class="value ${gapBal<0?'bad':'good'}">${fmt(gapBal)} сўм</div></div></div>
+  </div>
+  ${lowBalanceCardHtml()}`;
 }
 // "Бош саҳифа" экрани — табл кўп бўлган роль/станцияларда (7-9 та)
 // ҳаммасини йирик, осон топиладиган icon-badge катакчалар орқали
