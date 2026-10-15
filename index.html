@@ -1128,8 +1128,11 @@ function renderShell(){
 // доменининг "тезкор" (QUICK_TABS'даги биринчи) табига олиб боради.
 function domainNavButtonsHtml(activeDomain){
   const role = state.profile.role;
-  const metanDef = navTabsFor(role,'metan').quick[0][0];
-  const benzinDef = navTabsFor(role,'benzin').quick[0][0];
+  // Қаттиқ белгиланган — 'overview'/'bz_reports' ҳар доим даромад/фойда
+  // кўрсатадиган саҳифалар (QUICK_TABS/navTabsFor'дан олинса, Бензин учун
+  // баъзан 'bz_daily' — яъни қабул қилиш КИРИТИШ формаси — чиқиб қолар эди).
+  const metanDef = 'overview';
+  const benzinDef = 'bz_reports';
   const homeIcon = `<svg class="tab-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>`;
   const items = [
     { key:'home', grp:'overview', label:'Бош саҳифа', onclick:`goHome()`, icon:homeIcon },
@@ -1177,8 +1180,12 @@ function tplHomeLight(){
   const mPL = computeMonthlyPL(monthStr);
   const bPL = computeBenzinMonthlyPL(monthStr);
   const gapBal = gapBalance();
-  const metanDef = navTabsFor(role,'metan').quick[0][0];
-  const benzinDef = navTabsFor(role,'benzin').quick[0][0];
+  // Метан учун доимо 'overview' (ойлик даромад/фойда ҳисоби бор), Бензин
+  // учун 'bz_reports' (ойлик ялпи фойда ҳисоби ва чартлар шу ерда) —
+  // 'bz_daily' (қабул қилиш — киритиш формаси) ЭМАС, акс ҳолда "Бензин"
+  // тугмаси даромадни кўрсатиш ўрнига киритиш экранини очиб қоларди.
+  const metanDef = 'overview';
+  const benzinDef = 'bz_reports';
   return `
   <div class="domain-grid" style="margin-top:4px">
     <button class="domain-card metan" onclick="goToStationTab('metan','${metanDef}')">
@@ -1198,10 +1205,11 @@ function tplHomeLight(){
     </button>
   </div>
   <div class="card" style="margin-top:14px">
-    <div class="section-title"><h2>Шу ойги харажатлар</h2></div>
-    <div class="tile-row">
-      <div class="tile"><div class="label">Метан харажат</div><div class="value">${fmt(mPL.expensesTotal)} сўм</div></div>
-      <div class="tile"><div class="label">Бензин харажат</div><div class="value">${fmt(bPL.expensesTotal)} сўм</div></div>
+    <div class="section-title"><h2>Харажат киритиш</h2></div>
+    <p class="hint">Қиймат эмас — тўғридан-тўғри киритиш учун тугма.</p>
+    <div class="quick-action-grid">
+      <button class="quick-action-btn" onclick="goToStationTab('metan','expenses')"><span class="quick-action-icon work">${tabIconSvg('expenses').replace('class="tab-icon"','')}</span><span>Метан харажат</span></button>
+      <button class="quick-action-btn" onclick="goToStationTab('benzin','bz_expenses')"><span class="quick-action-icon reports">${tabIconSvg('bz_expenses').replace('class="tab-icon"','')}</span><span>Бензин харажат</span></button>
     </div>
   </div>
   <div class="card" style="margin-top:14px">
