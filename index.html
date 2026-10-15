@@ -281,6 +281,20 @@ tbody tr:hover td{background:var(--surface-2)}
 .drawer-group-title.benzin{color:var(--accent)}
 .drawer-group-title.umumiy{color:var(--purple)}
 .drawer-group-title svg{width:15px;height:15px}
+/* Домен бўлимлари (Метан/Бензин/Умумий) — рангли, тўлиқ-энли, йиғиладиган
+   (accordion) сарлавҳалар: бир қарашда рангидан домени аниқ кўриниб
+   турсин, ва босилганда ичидаги бандлар очилиб/йиғилиб, рўйхат жуда
+   узун бўлиб кетмасин. */
+.drawer-domain-header{display:flex;align-items:center;justify-content:space-between;width:100%;border:none;cursor:pointer;padding:13px 18px;font-family:inherit;font-weight:800;font-size:.88rem;text-align:left;-webkit-tap-highlight-color:transparent}
+.drawer-domain-header-left{display:flex;align-items:center;gap:10px}
+.drawer-domain-header-left svg{width:17px;height:17px;flex-shrink:0}
+.drawer-domain-header.metan{background:var(--gold-wash);color:#9a6611}
+.drawer-domain-header.benzin{background:var(--accent-wash);color:var(--accent)}
+.drawer-domain-header.umumiy{background:var(--purple-wash);color:var(--purple)}
+.drawer-chev{transition:transform .2s ease;flex-shrink:0}
+.drawer-chev.open{transform:rotate(180deg)}
+.drawer-domain-items{max-height:0;overflow:hidden;transition:max-height .25s ease}
+.drawer-domain-items.open{max-height:640px}
 
 /* Узун формаларда (масалан кунлик ҳисобот) пастга тушиб кетгандан кейин
    тепага тезда қайтиш учун сузувчи тугма — пастки навигация устида. */
@@ -472,23 +486,30 @@ function tplSideMenu(){
     <div class="drawer-role">${roleLabel(role)}${isMultiStation?'':' — '+(currentStation==='metan'?'Метан':(currentStation==='benzin'?'Бензин':'Умумий ҳолат'))}</div>
   </div>`;
   if(isMultiStation){
+    // Ҳар домен — рангли сарлавҳа (босилганда очилиб/йиғилиб турадиган
+    // accordion) + ичидаги бандлар. Шу тариқа: (1) ранг орқали Метан/
+    // Бензин/Умумий бир қарашда ажралиб туради, (2) фақат жорий турилган
+    // домен очиқ ҳолда бошланади — рўйхат қатор-қатор бўлиб кетмайди.
     const domainGroup = (domain, title, iconSvg)=>{
       const list = tabsForRole(role, domain);
       if(!list.length) return '';
+      const isOpen = domain === currentStation;
       const rows = list.map(([id,label])=>
         `<button class="drawer-item${(domain===currentStation && id===activeTab)?' active':''}" onclick="goToStationTab('${domain}','${id}');closeSideMenu()">${tabIconSvg(id)}<span>${esc(stripEmoji(label))}</span></button>`
       ).join('');
-      return `<div class="drawer-group-title ${domain}">${iconSvg}<span>${title}</span></div>${rows}`;
+      return `
+      <button type="button" class="drawer-domain-header ${domain}" aria-expanded="${isOpen}" onclick="toggleDrawerGroup('${domain}')">
+        <span class="drawer-domain-header-left">${iconSvg}<span>${title}</span></span>
+        <svg class="drawer-chev${isOpen?' open':''}" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="drawer-domain-items${isOpen?' open':''}" id="drawerItems_${domain}">${rows}</div>`;
     };
     return `
     ${head}
     <button class="drawer-item${currentStation==='home'?' active':''}" onclick="goHome();closeSideMenu()">${tabIconSvg('overview')||`<svg class="tab-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>`}<span>Бош саҳифа</span></button>
-    <div class="drawer-divider"></div>
-    ${domainGroup('metan','Метан', stationIconSvg(STATION_ICON_FLAME).replace('<svg ','<svg class="tab-icon" width="15" height="15" '))}
-    <div class="drawer-divider"></div>
-    ${domainGroup('benzin','Бензин', stationIconSvg(STATION_ICON_FUEL).replace('<svg ','<svg class="tab-icon" width="15" height="15" '))}
-    <div class="drawer-divider"></div>
-    ${domainGroup('umumiy','Умумий ҳисобот', `<svg class="tab-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="13" width="3" height="5"/><rect x="12" y="9" width="3" height="9"/><rect x="17" y="5" width="3" height="13"/></svg>`)}
+    ${domainGroup('metan','Метан', stationIconSvg(STATION_ICON_FLAME).replace('<svg ','<svg class="tab-icon" width="17" height="17" '))}
+    ${domainGroup('benzin','Бензин', stationIconSvg(STATION_ICON_FUEL).replace('<svg ','<svg class="tab-icon" width="17" height="17" '))}
+    ${domainGroup('umumiy','Умумий ҳисобот', `<svg class="tab-icon" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="13" width="3" height="5"/><rect x="12" y="9" width="3" height="9"/><rect x="17" y="5" width="3" height="13"/></svg>`)}
     <div class="drawer-divider"></div>
     ${logoutBtn}`;
   }
@@ -531,6 +552,21 @@ function closeSideMenu(){
   document.body.classList.remove('sheet-lock');
 }
 document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeSideMenu(); });
+// Чап менюдаги Метан/Бензин/Умумий бўлимлари — босилганда очилиб/
+// йиғилиб туради (accordion), шунда рўйхат жуда узун бўлиб кетмайди.
+// Қайта рендер қилинмайди — фақат CSS класс алмаштирилади (тезроқ).
+function toggleDrawerGroup(domain){
+  const items = document.getElementById('drawerItems_'+domain);
+  if(!items) return;
+  const header = items.previousElementSibling;
+  const willOpen = !items.classList.contains('open');
+  items.classList.toggle('open', willOpen);
+  if(header){
+    header.setAttribute('aria-expanded', String(willOpen));
+    const chevEl = header.querySelector('.drawer-chev');
+    if(chevEl) chevEl.classList.toggle('open', willOpen);
+  }
+}
 
 // ============================================================
 // OFFLINE QUEUE — интернет йўқ пайтда кунлик ҳисоботни телефонда
@@ -1056,14 +1092,21 @@ function renderShell(){
       </div>
     </div>
     <div id="offlineBanner"></div>
-    <div class="tabs" id="tabsRow"></div>
+    <div class="tabs" id="tabsRow" style="${isMultiStation?'display:none':''}"></div>
     <div id="tabBody"></div>
     <button class="scroll-top-btn" id="scrollTopBtn" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="Тепага">
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
     </button>
     <div class="bottomnav" id="bottomNav"></div>`;
-  document.getElementById('tabsRow').innerHTML = tabs.map(([id,label])=>
-    `<button class="tab-btn grp-${tabGroupColor(id)} ${id===activeTab?'active':''}" onclick="switchTab('${id}')" style="display:flex;align-items:center;gap:6px">${tabIconSvg(id)}<span>${esc(stripEmoji(label))}</span></button>`).join('');
+  // Куп-станцияли роллар учун юқоридаги таб-тугмалар қатори КЕРАК ЭМАС —
+  // чап менюдаги (drawer) рўйхат ва пастки 4 домен-тугмаси тўлиқ
+  // навигацияни берадi, бу қатор эса фақат такрорлаш ва тартибсизлик
+  // (жуда куп тугма) ҳосил қиларди. Шунинг учун фақат БИТТА станцияга
+  // бириктирилган роллар (оператор ва ш.к.) учун кўрсатилади.
+  if(!isMultiStation){
+    document.getElementById('tabsRow').innerHTML = tabs.map(([id,label])=>
+      `<button class="tab-btn grp-${tabGroupColor(id)} ${id===activeTab?'active':''}" onclick="switchTab('${id}')" style="display:flex;align-items:center;gap:6px">${tabIconSvg(id)}<span>${esc(stripEmoji(label))}</span></button>`).join('');
+  }
   if(isMultiStation){
     // Иккала станцияга кираоладиган роллар учун пастки навигация ҳар
     // доим БИР ХИЛ 4 та "домен" тугмасидан иборат (Бош саҳифа/Метан/
@@ -1153,6 +1196,13 @@ function tplHomeLight(){
       <span class="domain-card-name">Умумий ҳисобот</span>
       <span class="domain-card-sub">Тўлиқ молиявий кўриниш, Excel экспорт</span>
     </button>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <div class="section-title"><h2>Шу ойги харажатлар</h2></div>
+    <div class="tile-row">
+      <div class="tile"><div class="label">Метан харажат</div><div class="value">${fmt(mPL.expensesTotal)} сўм</div></div>
+      <div class="tile"><div class="label">Бензин харажат</div><div class="value">${fmt(bPL.expensesTotal)} сўм</div></div>
+    </div>
   </div>
   <div class="card" style="margin-top:14px">
     <div class="section-title"><h2>Қолдиқлар</h2></div>
