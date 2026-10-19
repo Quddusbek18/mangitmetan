@@ -665,6 +665,20 @@ async function submitMetanEntryPayload(f){
       throw e2;
     }
   }
+  if(f.expenseAmount && f.expenseAmount > 0){
+    // Худди юқоридагидек — ҳисобот аллақачон сақланган, фақат шу кичик
+    // харажат "Фарқ фонди"га (gap_ledger) ёзилмай қолиши мумкин.
+    const { error: e3 } = await sb.from('gap_ledger').insert({
+      date: f.date, amount: f.expenseAmount, source: 'operator_expense',
+      note: f.expenseNote, created_by_name: f.operator
+    });
+    if(e3){
+      e3.entrySavedButExpenseFailed = true;
+      e3.failedExpense = { amount: f.expenseAmount, note: f.expenseNote };
+      e3.savedEntryDate = f.date;
+      throw e3;
+    }
+  }
 }
 async function submitBenzinEntryPayload(f){
   const { data: entryRow, error } = await sb.from('benzin_entries').insert({
@@ -684,6 +698,24 @@ async function submitBenzinEntryPayload(f){
       e2.failedSales = f.sales;
       e2.savedEntryDate = f.date;
       throw e2;
+    }
+  }
+  if(f.harajat && f.harajat > 0){
+    // Шу кунлик кичик харажат умумий "Бошқа харажатлар" (other_expenses)
+    // жадвалига ёзилади (station='benzin') — ойлик ялпи фойда ҳисобида
+    // (computeBenzinMonthlyPL) АВТОМАТИК ҳисобга олинади. Ҳисобот
+    // (benzin_entries) аллақачон сақланган — шу ёзув муваффақиятсиз
+    // бўлса, оператор буни кўрмай ўтиб кетмаслиги учун огоҳлантириш.
+    const { error: e3 } = await sb.from('other_expenses').insert({
+      date: f.date, description: f.harajatIzoh || 'Оператор кунлик харажати',
+      amount: f.harajat, station: 'benzin', business_category: null,
+      created_by_name: f.operator
+    });
+    if(e3){
+      e3.entrySavedButExpenseFailed = true;
+      e3.failedExpense = { amount: f.harajat, note: f.harajatIzoh };
+      e3.savedEntryDate = f.date;
+      throw e3;
     }
   }
 }
@@ -1709,6 +1741,14 @@ function tplEntry(){
     <p class="hint">Нақт = Сотув суммаси − UZCARD − HUMO − QR (тепадаги хулоса панелида кўринади).</p>
   </div>
   <div class="card">
+    <h2>Кунлик кичик харажат (ихтиёрий)</h2>
+    <p class="hint">Бу "Нақт" ҳисобига ТАЪСИР ҚИЛМАЙДИ — "Фарқ фонди"дан айрилади (кассадаги кунлик сотув ҳисоби ўзгармайди).</p>
+    <div class="row">
+      <div class="field"><label>Сумма (сўм)</label><input type="number" id="f_expense_amount" value="0"></div>
+      <div class="field" style="flex:2"><label>Изоҳ</label><input type="text" id="f_expense_note" placeholder="масалан: чой-нон, эҳтиёт қисм"></div>
+    </div>
+  </div>
+  <div class="card">
     <div class="section-title"><h2>Компанияларга берилган газ</h2></div>
     <p class="hint">Қанча m3 берилганини ёзиш учун компания устига босинг.</p>
     <div class="company-grid" id="deliveryGrid"></div>
@@ -1828,7 +1868,9 @@ function collectEntryForm(){
   const baseline = pumpBaseline();
   const pumpEnd = PUMP_NAMES.map((_,i)=>parseFloat(document.getElementById('pump_'+i).value));
   const izoh = document.getElementById('f_izoh').value.trim() || null;
-  return { date, operator, calc, agres, pumpEnd, baseline, izoh };
+  const expenseAmount = parseFloat(document.getElementById('f_expense_amount').value)||0;
+  const expenseNote = document.getElementById('f_expense_note').value.trim() || null;
+  return { date, operator, calc, agres, pumpEnd, baseline, izoh, expenseAmount, expenseNote };
 }
 
 // Step 1: operator hits "Текшириш ва юбориш" -> validate, then show a
@@ -1883,6 +1925,11 @@ function openReview(){
         <h3>Компанияларга берилган газ</h3>
         ${delRows}
       </div>
+
+      ${f.expenseAmount>0 ? `<div class="review-section"><h3>Кунлик кичик харажат (Фарқ фондидан айрилади)</h3>
+        <div class="review-row"><span class="k">Сумма</span><span><b>${fmt(f.expenseAmount)} сўм</b></span></div>
+        ${f.expenseNote?`<div class="review-row"><span class="k">Изоҳ</span><span>${esc(f.expenseNote)}</span></div>`:''}
+      </div>` : ''}
 
       ${f.izoh ? `<div class="review-section"><h3>Изоҳ</h3><p style="font-size:.9rem">${esc(f.izoh)}</p></div>` : ''}
 
@@ -1951,6 +1998,14 @@ async function doSubmitEntry(){
       closeReview();
       const list = e.failedDeliveries.map(d=>`• ${d.companyName} — ${fmt(d.m3)} m3`).join('\n');
       alert(`⚠️ ДИҚҚАТ — КОМПАНИЯЛАРГА ГАЗ ЁЗИЛМАДИ!\n\n${e.savedEntryDate} санаси учун ҳисобот САҚЛАНДИ, лекин қуйидаги компанияларга берилган газ хато туфайли БАЗАГА ЁЗИЛМАДИ (уларнинг балансига ҳозирча таъсир қилмайди):\n\n${list}\n\nХато: ${e.message||''}\n\n⚠️ ДАРҲОЛ CEO'ГА ХАБАР БЕРИНГ — у "Tahrirlash" орқали шу санага юқоридаги компанияларни қўлда қўшиб қўйиши керак, акс ҳолда бу газ ҳеч қаерда қайд этилмай қолади.`);
+      pending = {deliveries:[]};
+      await loadAll();
+      renderTab();
+      return;
+    }
+    if(e.entrySavedButExpenseFailed){
+      closeReview();
+      alert(`⚠️ ДИҚҚАТ — КУНЛИК ХАРАЖАТ ФАРҚ ФОНДИГА ЁЗИЛМАДИ!\n\n${e.savedEntryDate} санаси учун ҳисобот САҚЛАНДИ, лекин қуйидаги кичик харажат хато туфайли БАЗАГА ЁЗИЛМАДИ:\n\n• ${fmt(e.failedExpense.amount)} сўм${e.failedExpense.note?' — '+e.failedExpense.note:''}\n\nХато: ${e.message||''}\n\n⚠️ ДАРҲОЛ CEO'ГА ХАБАР БЕРИНГ — у "Фарқ фонди" бўлимидан шу санага ушбу харажатни қўлда қўшиб қўйиши керак.`);
       pending = {deliveries:[]};
       await loadAll();
       renderTab();
@@ -3757,6 +3812,14 @@ function tplBenzinDaily(role){
     </div>
   </div>
   <div class="card">
+    <h2>Кунлик кичик харажат (ихтиёрий)</h2>
+    <p class="hint">Умумий кассадан (сотувдан) айрилади — "Нақд" автоматик камаяди.</p>
+    <div class="row">
+      <div class="field"><label>Сумма (сўм)</label><input type="number" id="bz_harajat" value="0" oninput="recalcBenzinPreview()"></div>
+      <div class="field" style="flex:2"><label>Изоҳ</label><input type="text" id="bz_harajat_izoh" placeholder="масалан: насос учун эҳтиёт қисм"></div>
+    </div>
+  </div>
+  <div class="card">
     <div class="section-title"><h2>Компанияларга сотилган бензин</h2></div>
     <p class="hint">Қанча литр сотилганини ёзиш учун компания устига босинг.</p>
     <div class="company-grid" id="bzSalesGrid"></div>
@@ -4076,7 +4139,9 @@ function recalcBenzinPreview(){
   const salesSum = benzinPending.sales.reduce((s,x)=>s+x.sum,0);
   const uzkard = parseFloat(document.getElementById('bz_uzkard').value)||0;
   const xumo = parseFloat(document.getElementById('bz_xumo').value)||0;
-  const naqd = revenue - uzkard - xumo - salesSum;
+  const harajatEl = document.getElementById('bz_harajat');
+  const harajat = harajatEl ? (parseFloat(harajatEl.value)||0) : 0;
+  const naqd = revenue - uzkard - xumo - salesSum - harajat;
   box.innerHTML = lines +
     `<div class="tile"><div class="label">Сотув суммаси</div><div class="value">${fmt(revenue)}</div></div>
      <div class="tile"><div class="label">Нақд (автоматик)</div><div class="value ${naqd<0?'bad':'good'}">${fmt(naqd)}</div></div>`;
@@ -4164,10 +4229,12 @@ function collectBenzinForm(){
   const xumo = parseFloat(document.getElementById('bz_xumo').value)||0;
   const kechagiVal = document.getElementById('bz_kechagi').value;
   const salesSum = benzinPending.sales.reduce((s,x)=>s+x.sum,0);
-  const naqd = revenue - uzkard - xumo - salesSum;
+  const harajat = parseFloat(document.getElementById('bz_harajat').value)||0;
+  const harajatIzoh = document.getElementById('bz_harajat_izoh').value.trim() || null;
+  const naqd = revenue - uzkard - xumo - salesSum - harajat;
   const izoh = document.getElementById('bz_izoh').value.trim() || null;
 
-  return { date, readings, soldByFuel, revenue, uzkard, xumo, kechagiVal, salesSum, naqd, izoh };
+  return { date, readings, soldByFuel, revenue, uzkard, xumo, kechagiVal, salesSum, harajat, harajatIzoh, naqd, izoh };
 }
 
 // 1-қадам: текшириш экрани — ҳали ҳеч нарса базага ёзилмайди.
@@ -4206,6 +4273,7 @@ function openBenzinReview(){
         <div class="review-row"><span class="k">UZCARD</span><span>${fmt(f.uzkard)} сўм</span></div>
         <div class="review-row"><span class="k">HUMO</span><span>${fmt(f.xumo)} сўм</span></div>
         <div class="review-row"><span class="k">Компанияларга</span><span>${fmt(f.salesSum)} сўм</span></div>
+        ${f.harajat>0?`<div class="review-row"><span class="k">Кунлик кичик харажат</span><span>− ${fmt(f.harajat)} сўм${f.harajatIzoh?' ('+esc(f.harajatIzoh)+')':''}</span></div>`:''}
         <div class="review-row"><span class="k">Нақд (автоматик)</span><span><b>${fmt(f.naqd)} сўм</b></span></div>
       </div>
 
@@ -4272,6 +4340,14 @@ async function doSubmitBenzinEntry(){
       closeBenzinReview();
       const list = e.failedSales.map(s=>`• ${s.company_name} — ${fmt(s.liters)} л (${s.fuel_name}) — ${fmt(s.sum)} сўм`).join('\n');
       alert(`⚠️ ДИҚҚАТ — КОМПАНИЯГА СОТИЛГАН БЕНЗИН ЁЗИЛМАДИ!\n\n${e.savedEntryDate} санаси учун ҳисобот САҚЛАНДИ, лекин қуйидаги компанияга сотувлар хато туфайли БАЗАГА ЁЗИЛМАДИ:\n\n${list}\n\nХато: ${e.message||''}\n\n⚠️ ДАРҲОЛ CEO'ГА ХАБАР БЕРИНГ — у қўлда қўшиб қўйиши керак.`);
+      benzinPending = { sales: [] };
+      await loadAll();
+      renderTab();
+      return;
+    }
+    if(e.entrySavedButExpenseFailed){
+      closeBenzinReview();
+      alert(`⚠️ ДИҚҚАТ — КУНЛИК ХАРАЖАТ ЁЗИЛМАДИ!\n\n${e.savedEntryDate} санаси учун ҳисобот САҚЛАНДИ, лекин қуйидаги кичик харажат хато туфайли БАЗАГА ЁЗИЛМАДИ:\n\n• ${fmt(e.failedExpense.amount)} сўм${e.failedExpense.note?' — '+e.failedExpense.note:''}\n\nХато: ${e.message||''}\n\n⚠️ ДАРҲОЛ CEO'ГА ХАБАР БЕРИНГ — у "Бензин → Харажатлар → Бошқа харажатлар" бўлимидан шу санага ушбу харажатни қўлда қўшиб қўйиши керак (акс ҳолда ойлик фойда ҳисобида кўрсатилмайди).`);
       benzinPending = { sales: [] };
       await loadAll();
       renderTab();
