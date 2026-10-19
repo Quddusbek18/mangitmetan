@@ -653,7 +653,17 @@ async function submitMetanEntryPayload(f){
   if(f.deliveries && f.deliveries.length){
     const rows = f.deliveries.map(d=>({entry_id: entryRow.id, company_id: d.company_id, m3: d.m3}));
     const { error: e2 } = await sb.from('deliveries').insert(rows);
-    if(e2) throw e2;
+    if(e2){
+      // Ҳисобот (entries) аллақачон базага ёзилган — буни орқага қайтариб
+      // бўлмайди (транзакция эмас). Компанияларга берилган газ эса
+      // ёзилмай қолди. Буни ОПЕРАТОР КЎРМАЙ ЎТКАЗИБ ЮБОРМАСЛИГИ учун
+      // хатога қайси компаниялар/m3 йўқолганини қўшиб, doSubmitEntry'да
+      // алоҳида, йўқолмайдиган огоҳлантириш кўрсатилади.
+      e2.entrySavedButDeliveriesFailed = true;
+      e2.failedDeliveries = f.deliveries;
+      e2.savedEntryDate = f.date;
+      throw e2;
+    }
   }
 }
 async function submitBenzinEntryPayload(f){
@@ -667,7 +677,14 @@ async function submitBenzinEntryPayload(f){
   if(f.sales && f.sales.length){
     const rows = f.sales.map(s=>({ entry_id: entryRow.id, company_id: s.company_id, fuel_type_id: s.fuel_type_id, liters: s.liters, price: s.price, sum: s.sum }));
     const { error: e2 } = await sb.from('benzin_company_sales').insert(rows);
-    if(e2) throw e2;
+    if(e2){
+      // Метандаги худди шу хатоси — ҳисобот (benzin_entries) аллақачон
+      // сақланган, компанияга сотилган бензин эса ёзилмай қолди.
+      e2.entrySavedButSalesFailed = true;
+      e2.failedSales = f.sales;
+      e2.savedEntryDate = f.date;
+      throw e2;
+    }
   }
 }
 // Навбатдаги ҳар бир ёзувни кетма-кет юборишга ҳаракат қилади. Тармоқ
@@ -1927,6 +1944,15 @@ async function doSubmitEntry(){
       closeReview();
       toast("📤 Интернетга уланиб бўлмади — ҳисобот телефонда сақланди, қайта уланганда ўзи юборилади");
       pending = {deliveries:[]};
+      renderTab();
+      return;
+    }
+    if(e.entrySavedButDeliveriesFailed){
+      closeReview();
+      const list = e.failedDeliveries.map(d=>`• ${d.companyName} — ${fmt(d.m3)} m3`).join('\n');
+      alert(`⚠️ ДИҚҚАТ — КОМПАНИЯЛАРГА ГАЗ ЁЗИЛМАДИ!\n\n${e.savedEntryDate} санаси учун ҳисобот САҚЛАНДИ, лекин қуйидаги компанияларга берилган газ хато туфайли БАЗАГА ЁЗИЛМАДИ (уларнинг балансига ҳозирча таъсир қилмайди):\n\n${list}\n\nХато: ${e.message||''}\n\n⚠️ ДАРҲОЛ CEO'ГА ХАБАР БЕРИНГ — у "Tahrirlash" орқали шу санага юқоридаги компанияларни қўлда қўшиб қўйиши керак, акс ҳолда бу газ ҳеч қаерда қайд этилмай қолади.`);
+      pending = {deliveries:[]};
+      await loadAll();
       renderTab();
       return;
     }
@@ -4239,6 +4265,15 @@ async function doSubmitBenzinEntry(){
       closeBenzinReview();
       toast("📤 Интернетга уланиб бўлмади — ҳисобот телефонда сақланди, қайта уланганда ўзи юборилади");
       benzinPending = { sales: [] };
+      renderTab();
+      return;
+    }
+    if(e.entrySavedButSalesFailed){
+      closeBenzinReview();
+      const list = e.failedSales.map(s=>`• ${s.company_name} — ${fmt(s.liters)} л (${s.fuel_name}) — ${fmt(s.sum)} сўм`).join('\n');
+      alert(`⚠️ ДИҚҚАТ — КОМПАНИЯГА СОТИЛГАН БЕНЗИН ЁЗИЛМАДИ!\n\n${e.savedEntryDate} санаси учун ҳисобот САҚЛАНДИ, лекин қуйидаги компанияга сотувлар хато туфайли БАЗАГА ЁЗИЛМАДИ:\n\n${list}\n\nХато: ${e.message||''}\n\n⚠️ ДАРҲОЛ CEO'ГА ХАБАР БЕРИНГ — у қўлда қўшиб қўйиши керак.`);
+      benzinPending = { sales: [] };
+      await loadAll();
       renderTab();
       return;
     }
