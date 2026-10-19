@@ -870,6 +870,27 @@ async function afterLogin(session){
 // ============================================================
 // DATA LOADING
 // ============================================================
+// Supabase/PostgREST ҲАР БИР сўровда СТАНДАРТ ҲОЛАТДА фақат 1000
+// қаторгача қайтаради (ва .order() йўқ бўлса — қайси 1000 таси
+// қайтиши ҲАМ КАФОЛАТЛАНМАЙДИ). Жадвал 1000 қатордан катта бўлса,
+// .range() орқали БОСҚИЧМА-БОСҚИЧ (pagination) ҳамма қаторни
+// йиғиб олиш керак — акс ҳолда қисман (ва тасодифий) маълумот
+// жим-житлик билан йўқолади (деливериларда худди шундай бўлган).
+async function fetchAllRows(table, selectStr, orderCol){
+  const pageSize = 1000;
+  let all = [];
+  let from = 0;
+  while(true){
+    let q = sb.from(table).select(selectStr).range(from, from+pageSize-1);
+    if(orderCol) q = q.order(orderCol, {ascending:true});
+    const { data, error } = await q;
+    if(error) throw error;
+    all = all.concat(data || []);
+    if(!data || data.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
 async function loadAll(){
   const [companies, prices, taxRates, fixedCosts, prepayments, otherExpenses, entries, deliveries, payments,
     fuelTypes, fuelPrices, dispensers, benzinEntries, benzinCompanySales, benzinDeliveries,
@@ -881,13 +902,13 @@ async function loadAll(){
     sb.from('prepayments').select('*').order('month', {ascending:false}),
     sb.from('other_expenses').select('*').order('date', {ascending:false}),
     sb.from('entries').select('*').order('date', {ascending:false}).limit(400),
-    sb.from('deliveries').select('*, entries(price,date)'),
-    sb.from('payments').select('*, entries(date)').order('created_at', {ascending:false}),
+    fetchAllRows('deliveries', '*, entries(price,date)', 'created_at'),
+    fetchAllRows('payments', '*, entries(date)', 'created_at'),
     sb.from('fuel_types').select('*').order('name'),
     sb.from('fuel_prices').select('*').order('effective_date'),
     sb.from('dispensers').select('*').order('sort_order'),
     sb.from('benzin_entries').select('*').order('date', {ascending:false}).limit(400),
-    sb.from('benzin_company_sales').select('*'),
+    fetchAllRows('benzin_company_sales', '*', 'created_at'),
     sb.from('benzin_deliveries').select('*').order('date', {ascending:false}),
     sb.from('employees').select('*').order('full_name'),
     sb.from('employee_salaries').select('*').order('effective_date'),
@@ -903,13 +924,15 @@ async function loadAll(){
   state.prepayments = prepayments.data || [];
   state.otherExpenses = otherExpenses.data || [];
   state.entries = entries.data || [];
-  state.deliveries = deliveries.data || [];
-  state.payments = payments.data || [];
+  // deliveries/payments/benzinCompanySales ЭНДИ fetchAllRows'дан тўғридан-тўғри
+  // массив бўлиб келади (.data билан ўралмаган) — пагинация шу функция ичида.
+  state.deliveries = deliveries || [];
+  state.payments = payments || [];
   state.fuelTypes = fuelTypes.data || [];
   state.fuelPrices = fuelPrices.data || [];
   state.dispensers = dispensers.data || [];
   state.benzinEntries = benzinEntries.data || [];
-  state.benzinCompanySales = benzinCompanySales.data || [];
+  state.benzinCompanySales = benzinCompanySales || [];
   state.benzinDeliveries = benzinDeliveries.data || [];
   state.employees = employees.data || [];
   state.employeeSalaries = employeeSalaries.data || [];
