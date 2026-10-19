@@ -1738,7 +1738,7 @@ function tplEntry(){
       <div class="field"><label>HUMO</label><input type="number" id="f_humo" step="1" value="0"></div>
       <div class="field"><label>QR тўлов</label><input type="number" id="f_qr" step="1" value="0"></div>
     </div>
-    <p class="hint">Нақт = Сотув суммаси − UZCARD − HUMO − QR (тепадаги хулоса панелида кўринади).</p>
+    <p class="hint">Нақт = Сотув суммаси − UZCARD − HUMO − QR − Компанияларга берилган газ қиймати (тепадаги хулоса панелида кўринади).</p>
   </div>
   <div class="card">
     <h2>Кунлик кичик харажат (ихтиёрий)</h2>
@@ -1771,13 +1771,19 @@ function recalcPreview(){
   const uzcard = parseFloat(document.getElementById('f_uzcard').value)||0;
   const humo = parseFloat(document.getElementById('f_humo').value)||0;
   const qr = parseFloat(document.getElementById('f_qr').value)||0;
-  const naqt = ok ? (salesValue - uzcard - humo - qr) : NaN;
+  // Компанияларга берилган газ НАҚД ПУЛ ЭМАС — улар кейинроқ ўтказма
+  // қилишади (Компаниялар → Баланс орқали кузатилади). Шунинг учун бу
+  // қиймат "Нақт"дан АЙРИЛИШИ КЕРАК, акс ҳолда операторга "топшир" деб
+  // кўрсатилган сумма ҳақиқий йиғилган пулдан кўп бўлиб чиқади.
+  const companyM3 = (pending && pending.deliveries) ? pending.deliveries.reduce((s,d)=>s+Number(d.m3||0),0) : 0;
+  const companyValue = companyM3 * price.sale_price;
+  const naqt = ok ? (salesValue - uzcard - humo - qr - companyValue) : NaN;
   document.getElementById('calcSoldM3').textContent = ok ? fmt(soldM3)+' m3' : '—';
   document.getElementById('calcSalesValue').textContent = ok ? fmt(salesValue)+" сўм" : '—';
   const naqtEl = document.getElementById('calcNaqt');
   naqtEl.textContent = ok ? fmt(naqt)+" сўм" : '—';
   naqtEl.className = 'value ' + (naqt < 0 ? 'bad' : 'good');
-  return {soldM3, salesValue, naqt, uzcard, humo, qr, price, ok};
+  return {soldM3, salesValue, naqt, uzcard, humo, qr, companyM3, companyValue, price, ok};
 }
 function buildPumpFields(){
   const wrap = document.getElementById('pumpFields');
@@ -1818,11 +1824,13 @@ function saveDeliveryEntry(companyId){
   if(existing){ existing.m3 = m3; } else { pending.deliveries.push({company_id:companyId, companyName:c.name, m3}); }
   closeSheet();
   renderDeliveryGrid();
+  recalcPreview();
 }
 function removeDeliveryEntry(companyId){
   pending.deliveries = pending.deliveries.filter(d=>d.company_id!==companyId);
   closeSheet();
   renderDeliveryGrid();
+  recalcPreview();
 }
 
 // Gathers + validates the current form. Returns null (and toasts the
@@ -1918,6 +1926,7 @@ function openReview(){
         <div class="review-row"><span class="k">UZCARD</span><span>${fmt(f.calc.uzcard)} сўм</span></div>
         <div class="review-row"><span class="k">HUMO</span><span>${fmt(f.calc.humo)} сўм</span></div>
         <div class="review-row"><span class="k">QR</span><span>${fmt(f.calc.qr)} сўм</span></div>
+        ${f.calc.companyValue>0?`<div class="review-row"><span class="k">Компанияларга берилган газ</span><span>− ${fmt(f.calc.companyValue)} сўм (${fmt(f.calc.companyM3)} m3)</span></div>`:''}
         <div class="review-row"><span class="k">Нақт (автоматик)</span><span><b>${fmt(f.calc.naqt)} сўм</b></span></div>
       </div>
 
