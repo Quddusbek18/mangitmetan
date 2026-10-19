@@ -3903,6 +3903,12 @@ function tplBenzinReports(){
     <p class="hint">Бензин станциясига тегишли ҳамма маълумот (кунлик ҳисоботлар, қабул қилишлар, ойлик хулоса) алоҳида файлга тушади.</p>
     <button class="btn secondary" onclick="exportBenzinExcel()">📥 Бензин — Excel'га юклаб олиш</button>
   </div>
+  <div class="card">
+    <h2>Сана бўйича қидириш</h2>
+    <p class="hint">Исталган ўтган кунни танланг — ўша кундаги барча маълумотлар (калонкалар, тўловлар, компанияларга сотилган) тўлиқ чиқади. CEO шу ердан тузатиши ҳам мумкин.</p>
+    <div class="field"><input type="date" id="bz_rep_date" max="${todayISO()}" oninput="renderBenzinReportDetail()"></div>
+    <div id="bzRepDetail"></div>
+  </div>
   <div class="card group-income">
     <div class="section-title"><h2>Бензин — ойлик ялпи фойда ҳисоби</h2><input type="month" id="bpl_month" value="${currentMonthKey()}" style="width:auto"></div>
     <div id="bplDetail"></div>
@@ -3929,10 +3935,178 @@ function tplBenzinReports(){
     <h2>Сўнгги кунлик ҳисоботлар</h2>
     <div class="table-wrap"><table><thead><tr><th>Сана</th><th>Оператор</th><th>Сумма</th><th>Нақд</th></tr></thead>
       <tbody>${state.benzinEntries.slice(0,20).map(e=>
-        `<tr><td>${e.date}</td><td>${esc(e.operator_name)}</td><td>${fmt(e.naqd + Number(e.uzkard||0) + Number(e.xumo||0))}</td><td>${fmt(e.naqd)}</td></tr>`
+        `<tr style="cursor:pointer" onclick="document.getElementById('bz_rep_date').value='${e.date}';renderBenzinReportDetail()"><td>${e.date}</td><td>${esc(e.operator_name)}</td><td>${fmt(e.naqd + Number(e.uzkard||0) + Number(e.xumo||0))}</td><td>${fmt(e.naqd)}</td></tr>`
       ).join('') || `<tr><td colspan="4" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
     </div>
   </div>`;
+}
+
+// ============================================================
+// БЕНЗИН — сана бўйича батафсил кўриш/тузатиш (МЕТАН'даги
+// renderReportDetail/startEditEntry/saveEntryEdit билан БИР ХИЛ
+// андоза — компанияга сотилган бензин ёзуви хато/йўқолиб қолса,
+// CEO энди шу ердан қўлда тузатиши мумкин, SQL'сиз).
+// ============================================================
+function renderBenzinReportDetail(){
+  const date = document.getElementById('bz_rep_date').value;
+  const box = document.getElementById('bzRepDetail');
+  if(!box) return;
+  if(!date){ box.innerHTML=''; return; }
+  const e = state.benzinEntries.find(x=>x.date===date);
+  if(!e){ box.innerHTML = `<p class="detail-box">Бу санада ҳисобот топилмади.</p>`; return; }
+  const calc = benzinComputeAll()[e.id] || { soldByFuel:{}, revenue:0 };
+  const sales = state.benzinCompanySales.filter(s=>s.entry_id===e.id);
+  const compName = id => (state.companies.find(c=>c.id===id)||{}).name || '—';
+  const canEdit = state.profile.role === 'ceo';
+  const canEditFields = canEditEntries();
+  const edits = (state.entryEditLog||[]).filter(x=>x.entry_id===e.id && x.station==='benzin');
+  box.innerHTML = `<div class="detail-box">
+    <div><b>${e.date}</b> — Оператор: ${esc(e.operator_name)} ${edits.length?`<span class="pill">✎ ${edits.length} марта тузатилган</span>`:''}</div>
+    <div>Сотилган: ${Object.keys(calc.soldByFuel).map(ftId=>fuelTypeName(ftId)+': '+fmt(calc.soldByFuel[ftId])+' л').join(' · ') || '—'}</div>
+    <div>Сотув суммаси: ${fmt(calc.revenue)} сўм</div>
+    <div>UZCARD: ${fmt(e.uzcard)} · HUMO: ${fmt(e.xumo)} · Нақд: ${fmt(e.naqd)}</div>
+    ${sales.length? '<div>Компанияга сотилган: '+sales.map(s=>compName(s.company_id)+' — '+fmt(s.liters)+' л ('+fuelTypeName(s.fuel_type_id)+') — '+fmt(s.sum)+' сўм').join(', ')+'</div>':'<div class="hint">Компанияга сотув йўқ.</div>'}
+    ${e.izoh? '<div>Изоҳ: '+esc(e.izoh)+'</div>':''}
+    <div style="margin-top:8px">
+      ${canEditFields? `<button class="btn small" onclick="startEditBenzinEntry('${e.id}')">Таҳрирлаш</button>`:''}
+      ${canEdit? `<button class="btn danger small" onclick="deleteBenzinEntry('${e.id}')">Бу ҳисоботни ўчириш</button>`:''}
+    </div>
+    <div id="bzEntryEditArea"></div>
+    ${edits.length? `<div style="margin-top:10px"><b>Тузатишлар тарихи:</b>
+      <table style="margin-top:4px"><thead><tr><th>Вақт</th><th>Ким</th><th>Майдон</th><th>Эски</th><th>Янги</th></tr></thead>
+      <tbody>${edits.slice().sort((a,b)=>new Date(b.edited_at)-new Date(a.edited_at)).map(x=>`<tr><td>${new Date(x.edited_at).toLocaleString('uz-UZ')}</td><td>${esc(x.edited_by_name||'—')}</td><td>${esc(x.field_name)}</td><td>${esc(x.old_value)}</td><td>${esc(x.new_value)}</td></tr>`).join('')}</tbody></table>
+    </div>`:''}
+  </div>`;
+}
+const BENZIN_EDIT_FIELDS = [
+  ['uzcard','UZCARD'], ['xumo','HUMO'], ['naqd','Нақд'], ['izoh','Изоҳ']
+];
+function benzinEditCompanyOptsHtml(selectedId){
+  return companiesForStation('benzin').slice().sort((a,b)=>a.name.localeCompare(b.name))
+    .map(c=>`<option value="${c.id}" ${c.id===selectedId?'selected':''}>${esc(c.name)}</option>`).join('');
+}
+function benzinEditFuelOptsHtml(selectedId){
+  return state.fuelTypes.map(f=>`<option value="${f.id}" ${f.id===selectedId?'selected':''}>${esc(f.name)}</option>`).join('');
+}
+function addEditBenzinSaleRow(){
+  const box = document.getElementById('beSaleNewRows');
+  if(!box) return;
+  const div = document.createElement('div');
+  div.className = 'row';
+  div.setAttribute('data-sale-id','new');
+  div.style.alignItems = 'flex-end';
+  div.innerHTML = `<div class="field"><label>Компания</label><select class="be-sale-company">${benzinEditCompanyOptsHtml(null)}</select></div>
+    <div class="field"><label>Ёқилғи</label><select class="be-sale-fuel">${benzinEditFuelOptsHtml(null)}</select></div>
+    <div class="field"><label>Литр</label><input class="be-sale-liters" type="number" step="0.01"></div>
+    <div class="field" style="flex:0 0 auto"><button class="btn small danger" type="button" onclick="this.closest('[data-sale-id]').remove()">Ўчириш</button></div>`;
+  box.appendChild(div);
+}
+function startEditBenzinEntry(id){
+  const e = state.benzinEntries.find(x=>x.id===id);
+  if(!e) return;
+  const sales = state.benzinCompanySales.filter(s=>s.entry_id===id);
+  const area = document.getElementById('bzEntryEditArea');
+  area.innerHTML = `<div class="action-box" style="margin-top:8px">
+    <h3 style="color:var(--accent)">✎ Тузатиш — ${e.date}</h3>
+    ${BENZIN_EDIT_FIELDS.map(([key,label])=>`<div class="field"><label>${label}</label><input id="be_${key}" type="${key==='izoh'?'text':'number'}" value="${esc(e[key]==null?'':e[key])}"></div>`).join('')}
+    <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:10px">
+      <label style="font-weight:700;display:block;margin-bottom:6px">Компанияларга сотилган бензин</label>
+      <div id="beSaleRows">
+        ${sales.map(s=>`<div class="row" data-sale-id="${s.id}" style="align-items:flex-end">
+          <div class="field"><label>Компания</label><select class="be-sale-company">${benzinEditCompanyOptsHtml(s.company_id)}</select></div>
+          <div class="field"><label>Ёқилғи</label><select class="be-sale-fuel">${benzinEditFuelOptsHtml(s.fuel_type_id)}</select></div>
+          <div class="field"><label>Литр</label><input class="be-sale-liters" type="number" step="0.01" value="${s.liters==null?'':s.liters}"></div>
+          <div class="field" style="flex:0 0 auto"><button class="btn small danger" type="button" onclick="this.closest('[data-sale-id]').remove()">Ўчириш</button></div>
+        </div>`).join('') || '<p class="hint">Бу ёзувда компанияга сотув йўқ.</p>'}
+      </div>
+      <div id="beSaleNewRows"></div>
+      <button class="btn small secondary" type="button" onclick="addEditBenzinSaleRow()">+ Компания қўшиш</button>
+      <p class="hint" style="margin-top:6px">Сумма ёқилғининг шу санадаги нархи бўйича автоматик қайта ҳисобланади.</p>
+    </div>
+    <div style="margin-top:8px">
+      <button class="btn small" onclick="saveBenzinEntryEdit('${e.id}')">Сақлаш</button>
+      <button class="btn small secondary" onclick="document.getElementById('bzEntryEditArea').innerHTML=''">Бекор қилиш</button>
+    </div>
+  </div>`;
+}
+async function saveBenzinEntryEdit(id){
+  const e = state.benzinEntries.find(x=>x.id===id);
+  if(!e) return;
+  const updates = {};
+  const logRows = [];
+  const compName = cid => (state.companies.find(c=>c.id===cid)||{}).name || '—';
+  const fuelName = fid => fuelTypeName(fid);
+  BENZIN_EDIT_FIELDS.forEach(([key])=>{
+    const el = document.getElementById('be_'+key);
+    if(!el) return;
+    let newVal = key==='izoh' ? el.value.trim() : parseFloat(el.value);
+    if(key==='izoh' && newVal==='') newVal = null;
+    const oldVal = e[key];
+    const changed = key==='izoh' ? (String(oldVal||'') !== String(newVal||'')) : (Number(oldVal||0) !== Number(newVal||0));
+    if(changed){
+      updates[key] = newVal;
+      logRows.push({ station:'benzin', entry_id:id, entry_date:e.date, field_name:key, old_value: oldVal==null?'':String(oldVal), new_value: newVal==null?'':String(newVal), edited_by_name: state.profile.full_name });
+    }
+  });
+
+  // Компанияларга сотилган бензин — қўшилган/ўзгартирилган/ўчирилган қаторлар
+  const existingSales = state.benzinCompanySales.filter(s=>s.entry_id===id);
+  const seenIds = new Set();
+  const rowEls = document.querySelectorAll('#beSaleRows [data-sale-id], #beSaleNewRows [data-sale-id]');
+  for(const rowEl of rowEls){
+    const saleId = rowEl.getAttribute('data-sale-id');
+    const companyId = rowEl.querySelector('.be-sale-company').value;
+    const fuelId = rowEl.querySelector('.be-sale-fuel').value;
+    const litersVal = parseFloat(rowEl.querySelector('.be-sale-liters').value);
+    const price = fuelPriceFor(fuelId, e.date);
+    const sum = (litersVal||0) * price;
+    if(saleId === 'new'){
+      if(companyId && fuelId && litersVal > 0){
+        const { error: insErr } = await sb.from('benzin_company_sales').insert({ entry_id:id, company_id:companyId, fuel_type_id:fuelId, liters:litersVal, price, sum });
+        if(insErr){ toast("Хатолик: "+insErr.message); return; }
+        logRows.push({ station:'benzin', entry_id:id, entry_date:e.date, field_name:'Компанияга сотув (янги)', old_value:'', new_value: compName(companyId)+' — '+fmt(litersVal)+' л ('+fuelName(fuelId)+')', edited_by_name: state.profile.full_name });
+      }
+    } else {
+      seenIds.add(saleId);
+      const orig = existingSales.find(s=>s.id===saleId);
+      if(!orig) continue;
+      if(String(orig.company_id)!==String(companyId) || String(orig.fuel_type_id)!==String(fuelId) || Number(orig.liters||0)!==Number(litersVal||0)){
+        const { error: updErr } = await sb.from('benzin_company_sales').update({ company_id: companyId, fuel_type_id: fuelId, liters: litersVal, price, sum }).eq('id', saleId);
+        if(updErr){ toast("Хатолик: "+updErr.message); return; }
+        logRows.push({ station:'benzin', entry_id:id, entry_date:e.date, field_name:'Компанияга сотув',
+          old_value: compName(orig.company_id)+' — '+fmt(orig.liters)+' л ('+fuelName(orig.fuel_type_id)+')', new_value: compName(companyId)+' — '+fmt(litersVal)+' л ('+fuelName(fuelId)+')', edited_by_name: state.profile.full_name });
+      }
+    }
+  }
+  for(const orig of existingSales){
+    if(!seenIds.has(orig.id)){
+      const { error: delErr } = await sb.from('benzin_company_sales').delete().eq('id', orig.id);
+      if(delErr){ toast("Хатолик: "+delErr.message); return; }
+      logRows.push({ station:'benzin', entry_id:id, entry_date:e.date, field_name:'Компанияга сотув (ўчирилди)',
+        old_value: compName(orig.company_id)+' — '+fmt(orig.liters)+' л ('+fuelName(orig.fuel_type_id)+')', new_value:'', edited_by_name: state.profile.full_name });
+    }
+  }
+
+  if(Object.keys(updates).length){
+    const { error } = await sb.from('benzin_entries').update(updates).eq('id', id);
+    if(error){ toast("Хатолик: "+error.message); return; }
+  }
+  if(!logRows.length){ toast("Ҳеч нарса ўзгармади"); document.getElementById('bzEntryEditArea').innerHTML=''; return; }
+  await sb.from('entry_edit_log').insert(logRows);
+  toast("Тузатилди ✓");
+  await loadAll();
+  renderTab();
+  document.getElementById('bz_rep_date').value = e.date;
+  renderBenzinReportDetail();
+}
+async function deleteBenzinEntry(id){
+  if(!confirm("Бу кунлик ҳисоботни бутунлай ўчирасизми? (унга боғлиқ компанияга сотув ёзувлари ҳам ўчади)")) return;
+  const { error } = await sb.from('benzin_entries').delete().eq('id', id);
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Ўчирилди ✓");
+  await loadAll();
+  document.getElementById('bz_rep_date').value = '';
+  renderTab();
 }
 
 function tplBenzinSettings(){
