@@ -3882,14 +3882,7 @@ function tplBenzinDaily(role){
     <button class="btn secondary" style="margin-top:10px" onclick="addBenzinDelivery()" id="bd_submitBtn">Қабул қилиш</button>
   </div>
   <div class="card">
-    <h2>Сўнгги қабул қилишлар</h2>
-    <div class="table-wrap"><table><thead><tr><th>Сана</th><th>ТТН №</th><th>Тури</th><th>Тонна</th><th>Литр</th><th>Сумма</th><th>Етказиб берувчи</th><th>Расм</th><th>Ким қабул қилди</th></tr></thead>
-      <tbody>${state.benzinDeliveries.slice(0,20).map(d=>
-        `<tr><td>${d.date}</td><td>${esc(d.ttn_number||'—')}</td><td>${esc(fuelTypeName(d.fuel_type_id))}</td><td>${d.tons?fmt(d.tons):'—'}</td><td>${fmt(d.liters)}</td><td>${fmt(d.total_sum)}</td><td>${esc(d.supplier_name||'')}</td>
-          <td>${d.photo_path?`<button class="btn secondary small" onclick="viewBenzinPhoto('${d.photo_path}')">Кўриш</button>`:'—'}</td>
-          <td class="hint">${esc(d.received_by_name||'—')}</td></tr>`
-      ).join('') || `<tr><td colspan="9" class="empty">Ҳали киритилмаган</td></tr>`}</tbody></table>
-    </div>
+    <p class="hint">Қабул қилишлар тарихи (сана бўйича қидириш, таҳрирлаш ва ўчириш) — <b onclick="switchTab('bz_reports')" style="cursor:pointer;color:var(--accent)">Ҳисоботлар → Накладной тарихи</b> бўлимида. Операторга бу бўлим (ва бутун "Ҳисоботлар" таби) умуман кўринмайди.</p>
   </div>`;
 
   return entryFormHtml + receiveFormHtml;
@@ -3902,6 +3895,12 @@ function tplBenzinReports(){
     <div class="section-title"><h2>Захира нусха (Excel)</h2></div>
     <p class="hint">Бензин станциясига тегишли ҳамма маълумот (кунлик ҳисоботлар, қабул қилишлар, ойлик хулоса) алоҳида файлга тушади.</p>
     <button class="btn secondary" onclick="exportBenzinExcel()">📥 Бензин — Excel'га юклаб олиш</button>
+  </div>
+  <div class="card">
+    <div class="section-title"><h2>Накладной тарихи (қабул қилинган ёқилғи)</h2></div>
+    <p class="hint">Исталган санани танланг — ўша кунги барча қабул қилишлар (бир кунда бир нечта бўлиши мумкин) чиқади. CEO/директор шу ердан тузатиши ва ўчириши мумкин. Бу бўлим операторга кўринмайди.</p>
+    <div class="field"><input type="date" id="bd_rep_date" max="${todayISO()}" oninput="renderBenzinDeliveryReportDetail()"></div>
+    <div id="bdRepDetail"></div>
   </div>
   <div class="card">
     <h2>Сана бўйича қидириш</h2>
@@ -4107,6 +4106,100 @@ async function deleteBenzinEntry(id){
   await loadAll();
   document.getElementById('bz_rep_date').value = '';
   renderTab();
+}
+
+// ============================================================
+// БЕНЗИН — накладной/қабул қилиш тарихи: сана бўйича қидириш,
+// таҳрирлаш ва ўчириш (renderBenzinReportDetail/startEditBenzinEntry
+// билан БИР ХИЛ андоза, фақат benzin_deliveries жадвали учун).
+// Фақат 'bz_reports' табида — операторга бу таб умуман кўринмайди.
+// ============================================================
+function renderBenzinDeliveryReportDetail(){
+  const dateEl = document.getElementById('bd_rep_date');
+  const box = document.getElementById('bdRepDetail');
+  if(!dateEl || !box) return;
+  const date = dateEl.value;
+  if(!date){ box.innerHTML=''; return; }
+  const rows = state.benzinDeliveries.filter(d=>d.date===date);
+  const role = state.profile.role;
+  const canEdit = role==='ceo' || role==='direktor';
+  const canDelete = role==='ceo';
+  if(!rows.length){ box.innerHTML = `<p class="detail-box">Бу санада қабул қилиш топилмади.</p>`; return; }
+  box.innerHTML = rows.map(d=>`<div class="detail-box" id="bdRow_${d.id}">
+    <div><b>${d.date}</b> — ${esc(fuelTypeName(d.fuel_type_id))} ${d.ttn_number?'(ТТН №'+esc(d.ttn_number)+')':''}</div>
+    <div>Литр: ${fmt(d.liters)}${d.tons?' · Тонна: '+fmt(d.tons):''} · Сумма: ${fmt(d.total_sum)} сўм</div>
+    ${d.supplier_name? '<div>Етказиб берувчи/изоҳ: '+esc(d.supplier_name)+'</div>':''}
+    ${d.contract_no? '<div>Шартнома: '+esc(d.contract_no)+'</div>':''}
+    <div class="hint">Ким қабул қилди: ${esc(d.received_by_name||'—')}</div>
+    ${d.photo_path?`<div style="margin-top:6px"><button class="btn secondary small" onclick="viewBenzinPhoto('${d.photo_path}')">Накладной расмини кўриш</button></div>`:''}
+    <div style="margin-top:8px">
+      ${canEdit? `<button class="btn small" onclick="startEditBenzinDelivery('${d.id}')">Таҳрирлаш</button>`:''}
+      ${canDelete? `<button class="btn danger small" onclick="deleteBenzinDelivery('${d.id}')">Ўчириш</button>`:''}
+    </div>
+    <div id="bdEditArea_${d.id}"></div>
+  </div>`).join('');
+}
+const BENZIN_DELIVERY_EDIT_FIELDS = [
+  ['date','Сана','date'], ['ttn_number','ТТН рақами','text'], ['tons','Тонна','number'],
+  ['liters','Литр','number'], ['total_sum','Сумма (сўм)','number'],
+  ['supplier_name','Етказиб берувчи/изоҳ','text'], ['contract_no','Шартнома','text']
+];
+function startEditBenzinDelivery(id){
+  const d = state.benzinDeliveries.find(x=>x.id===id);
+  const area = document.getElementById('bdEditArea_'+id);
+  if(!d || !area) return;
+  area.innerHTML = `<div class="action-box" style="margin-top:8px">
+    <h3 style="color:var(--accent)">✎ Тузатиш</h3>
+    <div class="field"><label>Ёқилғи тури</label><select id="bde_fuel_${id}">${state.fuelTypes.map(f=>`<option value="${f.id}" ${f.id===d.fuel_type_id?'selected':''}>${esc(f.name)}</option>`).join('')}</select></div>
+    ${BENZIN_DELIVERY_EDIT_FIELDS.map(([key,label,type])=>`<div class="field"><label>${label}</label><input id="bde_${key}_${id}" type="${type}" ${type==='number'?'step="0.01"':''} value="${esc(d[key]==null?'':d[key])}"></div>`).join('')}
+    <div style="margin-top:10px">
+      <button class="btn small" onclick="saveBenzinDeliveryEdit('${id}')">Сақлаш</button>
+      <button class="btn small secondary" onclick="document.getElementById('bdEditArea_${id}').innerHTML=''">Бекор қилиш</button>
+    </div>
+  </div>`;
+}
+async function saveBenzinDeliveryEdit(id){
+  const d = state.benzinDeliveries.find(x=>x.id===id);
+  if(!d) return;
+  const updates = {};
+  const logRows = [];
+  const fuelEl = document.getElementById('bde_fuel_'+id);
+  if(fuelEl && fuelEl.value !== String(d.fuel_type_id)){
+    updates.fuel_type_id = fuelEl.value;
+    logRows.push({ station:'benzin', entry_id:id, entry_date:d.date, field_name:'Ёқилғи тури', old_value: fuelTypeName(d.fuel_type_id), new_value: fuelTypeName(fuelEl.value), edited_by_name: state.profile.full_name });
+  }
+  BENZIN_DELIVERY_EDIT_FIELDS.forEach(([key,label,type])=>{
+    const el = document.getElementById('bde_'+key+'_'+id);
+    if(!el) return;
+    let newVal = type==='number' ? (el.value===''?null:parseFloat(el.value)) : el.value.trim();
+    if(type==='text' && newVal==='') newVal = null;
+    const oldVal = d[key];
+    const changed = type==='number' ? (Number(oldVal||0) !== Number(newVal||0)) : (String(oldVal||'') !== String(newVal||''));
+    if(changed){
+      updates[key] = newVal;
+      logRows.push({ station:'benzin', entry_id:id, entry_date:d.date, field_name:label, old_value: oldVal==null?'':String(oldVal), new_value: newVal==null?'':String(newVal), edited_by_name: state.profile.full_name });
+    }
+  });
+  if(!Object.keys(updates).length){ toast("Ҳеч нарса ўзгармади"); document.getElementById('bdEditArea_'+id).innerHTML=''; return; }
+  const { error } = await sb.from('benzin_deliveries').update(updates).eq('id', id);
+  if(error){ toast("Хатолик: "+error.message); return; }
+  if(logRows.length) await sb.from('entry_edit_log').insert(logRows);
+  toast("Тузатилди ✓");
+  await loadAll();
+  renderTab();
+  const dateEl = document.getElementById('bd_rep_date');
+  if(dateEl){ dateEl.value = updates.date || d.date; renderBenzinDeliveryReportDetail(); }
+}
+async function deleteBenzinDelivery(id){
+  if(!confirm("Бу қабул қилиш (накладной) ёзувини бутунлай ўчирасизми?")) return;
+  const d = state.benzinDeliveries.find(x=>x.id===id);
+  const { error } = await sb.from('benzin_deliveries').delete().eq('id', id);
+  if(error){ toast("Хатолик: "+error.message); return; }
+  toast("Ўчирилди ✓");
+  await loadAll();
+  renderTab();
+  const dateEl = document.getElementById('bd_rep_date');
+  if(dateEl && d){ dateEl.value = d.date; renderBenzinDeliveryReportDetail(); }
 }
 
 function tplBenzinSettings(){
