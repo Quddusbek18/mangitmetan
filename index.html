@@ -2441,7 +2441,7 @@ function plTrendSeries(station){
     labels: rows.map(r=>r.month.slice(2)),
     datasets: [
       { label: 'Сотув суммаси', data: rows.map(r=>r.revenue) },
-      { label: station==='benzin' ? 'Ялпи фойда' : 'Соф фойда', data: rows.map(r=>r.netProfit) }
+      { label: 'Соф фойда', data: rows.map(r=>r.netProfit) }
     ]
   };
 }
@@ -3458,7 +3458,7 @@ async function addBenzinFixedCost(){
     station: 'benzin',
     salary: 0,
     bank_loan_interest: 0,
-    land_property_tax: 0,
+    land_property_tax: parseFloat(document.getElementById('bfc_land').value)||0,
     electricity_tariff: parseFloat(document.getElementById('bfc_elec').value)||0,
     created_by_name: state.profile.full_name
   }, {onConflict:'effective_date,station'});
@@ -3661,9 +3661,14 @@ function computeBenzinMonthlyPL(monthStr){
 
   const fcBenzin = fixedCostFor(monthStr+'-01', 'benzin');
   const electricity = Number(fcBenzin.electricity_tariff)||0;
+  // Банк кредити бензин станциясига тегишли эмас (фақат метанда бор),
+  // шунинг учун бензин ҳисобида банк фоизи йўқ. Ер-мулк солиғи эса
+  // бензинга ҳам тегишли бўлиши мумкин — "Бензин → Харажатлар"даги
+  // Электр/Ер-мулк формасидан киритилади (номаълум бўлса 0).
+  const land = Number(fcBenzin.land_property_tax)||0;
   const salary = totalSalaryFor(monthStr, 'benzin');
   const otherExp = state.otherExpenses.filter(e=>e.date && e.date.slice(0,7)===monthStr && (e.station||'metan')==='benzin').reduce((s,e)=>s+Number(e.amount||0),0);
-  const expensesTotal = electricity + salary + otherExp;
+  const expensesTotal = electricity + salary + otherExp + land;
 
   const tax = taxFor(monthStr+'-01');
   const ndsRate = Number(tax.nds_rate)||0;
@@ -3681,12 +3686,12 @@ function computeBenzinMonthlyPL(monthStr){
   const socialAmount = salary * (Number(tax.social_tax_rate)||0);
 
   const grossProfit = revenue - cogs - excise - ndsNet;
-  const profitBeforeTax = grossProfit - electricity - salary - otherExp - socialAmount;
+  const profitBeforeTax = grossProfit - electricity - salary - otherExp - land - socialAmount;
   const profitTaxAmount = Math.max(profitBeforeTax, 0) * (Number(tax.profit_tax_rate)||0);
   const netProfit = profitBeforeTax - profitTaxAmount;
 
   return { count: monthEntries.length, revenue, byFuelRows, cogs, excise, outputVat, inputVat, ndsNet, grossProfit,
-    electricity, salary, otherExp, expensesTotal, socialAmount, profitBeforeTax, profitTaxAmount, netProfit, tax,
+    electricity, salary, otherExp, land, expensesTotal, socialAmount, profitBeforeTax, profitTaxAmount, netProfit, tax,
     monthlyPurchases };
 }
 function renderBenzinPL(){
@@ -3711,6 +3716,7 @@ function renderBenzinPL(){
     <div class="pl-group-title">Харажатлар</div>
     ${row('Электр энергияси (ойлик, жами)', fmt(pl.electricity)+" сўм", {indent:true})}
     ${row('Иш ҳақи (Бензин ходимлари)', fmt(pl.salary)+" сўм", {indent:true})}
+    ${row('Ер-мулк солиғи (ойлик)', fmt(pl.land)+" сўм", {indent:true})}
     ${row('Бошқа харажатлар', fmt(pl.otherExp)+" сўм", {indent:true})}
     ${row('= Харажатлар жами', fmt(pl.expensesTotal)+" сўм", {bold:true})}
     <div class="pl-group-title">Солиқлар</div>
@@ -3784,10 +3790,11 @@ function tplBenzinExpenses(role){
 function afterRenderBenzinExpenses(){ /* ҳозирча алоҳида init шарт эмас */ }
 function openNewBenzinElecSheet(){
   openSheet(`
-    <h2 style="margin-bottom:10px">Электр — янги қиймат қўшиш</h2>
-    <p class="hint">Ҳар ой электр ҳисоби келгач, шу ойнинг умумий суммасини (сўмда) шу ерга янги қатор қилиб қўшинг.</p>
+    <h2 style="margin-bottom:10px">Электр / Ер-мулк солиғи — янги қиймат қўшиш</h2>
+    <p class="hint">Ҳар ой электр ҳисоби келгач, шу ойнинг умумий суммасини (сўмда) шу ерга янги қатор қилиб қўшинг. Ер-мулк солиғи — агар бензин станциясига алоҳида тегишли бўлса, шу ерга ёзинг (банк кредити бензинда йўқлиги учун бу форма ундан ҳоли).</p>
     <div class="field"><label>Амал қилиш санаси</label><input type="date" id="bfc_date" value="${todayISO()}"></div>
     <div class="field"><label>Электр (ойлик, жами сўм)</label><input type="number" id="bfc_elec"></div>
+    <div class="field"><label>Ер-мулк солиғи (ойлик, сўм — номаълум бўлса бўш қолдиринг)</label><input type="number" id="bfc_land"></div>
     <label style="display:flex;gap:6px;align-items:center;margin:8px 0"><input type="checkbox" id="bfc_confirm" style="width:auto"> Ҳа, бу рақам ҳақиқатан ҳам ўзгарди</label>
     <button class="btn" style="width:100%" onclick="addBenzinFixedCost()">Қўшиш</button>
   `);
@@ -3799,6 +3806,7 @@ function openBenzinElecDetail(id){
     <h2 style="margin-bottom:10px">${f.effective_date}</h2>
     <div class="company-card-stats">
       <div><span class="k">Электр (ойлик, жами)</span><span class="v">${fmt(f.electricity_tariff)}</span></div>
+      <div><span class="k">Ер-мулк солиғи (ойлик)</span><span class="v">${fmt(f.land_property_tax)}</span></div>
       <div><span class="k">Ким киритган</span><span class="v">${esc(f.created_by_name||'—')}</span></div>
     </div>
   `);
@@ -4336,12 +4344,12 @@ function tplDashboard(){
         <span class="station-ov-icon reports">${stationIconSvg(STATION_ICON_FUEL)}</span>
         <div class="station-ov-body">
           <div class="station-ov-name">Бензин станцияси</div>
-          <div class="station-ov-label">Шу ой — ялпи фойда</div>
-          <div class="station-ov-value ${bPL.grossProfit<0?'bad':'good'}">${fmt(bPL.grossProfit)} сўм</div>
+          <div class="station-ov-label">Шу ой — соф фойда</div>
+          <div class="station-ov-value ${bPL.netProfit<0?'bad':'good'}">${fmt(bPL.netProfit)} сўм</div>
         </div>
       </div>
     </div>
-    <p class="hint" style="margin-top:10px">Метан — СОФ фойда (ҳамма харажат/солиқдан кейин), Бензин — ҳозирча ЯЛПИ фойда (умумий харажатлар ҳали иккита станцияга бўлинмаган). Шунинг учун бу иккиси қўшилмайди, алоҳида кўрсатилади.</p>
+    <p class="hint" style="margin-top:10px">Иккала станция ҳам барча харажат ва солиқлардан кейинги СОФ фойдани кўрсатади (Бензин — Харажатлар бўлимидаги электр/ер-мулк, иш ҳақи ва бошқа харажатлар ҳисобга олинган ҳолда).</p>
   </div>
   <div class="card">
     <div class="section-title"><h2>Тезкор амаллар</h2></div>
@@ -4365,7 +4373,7 @@ function tplDashboard(){
       <input type="month" id="dash_month" value="${currentMonthKey()}" style="width:auto">
       <button class="btn small" onclick="exportMonthlyPLExcel(document.getElementById('dash_month').value)">📊 Ойлик ҳисобот — Excel</button>
     </div>
-    <p class="hint">Иккала станциянинг (Метан ва Бензин) танланган ойдаги молиявий ҳаракати. Метан — СОФ фойда (барча харажат ва солиқлардан кейин). Бензин — ҳозирча фақат ЯЛПИ фойда (умумий харажатлар — иш ҳақи, банк, ер солиғи — ҳали иккита станцияга бўлинмагани сабабли). Шунинг учун иккиси ҚЎШИЛМАЙДИ, алоҳида-алоҳида кўрсатилади. Юқоридаги тугма орқали шу ойнинг тўлиқ ҳисоб-китоби (бухгалтер учун, қадам-бақадам) Excel файл сифатида юкланади.</p>
+    <p class="hint">Иккала станциянинг (Метан ва Бензин) танланган ойдаги молиявий ҳаракати — иккаласи ҳам СОФ фойда (барча харажат ва солиқлардан кейин). Юқоридаги тугма орқали шу ойнинг тўлиқ ҳисоб-китоби (бухгалтер учун, қадам-бақадам) Excel файл сифатида юкланади.</p>
     <div class="tile-row" id="dashTiles"></div>
   </div>
   <div class="card">
@@ -4389,7 +4397,7 @@ function renderDashboardTiles(){
     <div class="tile"><div class="label">Метан — сотув суммаси</div><div class="value">${fmt(mPL.revenue)} сўм</div></div>
     <div class="tile"><div class="label">Метан — соф фойда</div><div class="value ${mPL.netProfit<0?'bad':'good'}">${fmt(mPL.netProfit)} сўм</div></div>
     <div class="tile"><div class="label">Бензин — сотув суммаси</div><div class="value">${fmt(bPL.revenue)} сўм</div></div>
-    <div class="tile"><div class="label">Бензин — ялпи фойда</div><div class="value ${bPL.grossProfit<0?'bad':'good'}">${fmt(bPL.grossProfit)} сўм</div></div>`;
+    <div class="tile"><div class="label">Бензин — соф фойда</div><div class="value ${bPL.netProfit<0?'bad':'good'}">${fmt(bPL.netProfit)} сўм</div></div>`;
 }
 function afterRenderDashboard(){
   renderDashboardTiles();
