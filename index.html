@@ -389,7 +389,8 @@ const PUMP_NAMES = ['K1','K2','K3','K4','K5','K6'];
 let state = {
   session: null, profile: null,
   companies: [], prices: [], taxRates: [], fixedCosts: [], prepayments: [], otherExpenses: [],
-  entries: [], deliveries: [], payments: [], gapLedger: [], entryEditLog: [], bankTx: [], projectNotes: []
+  entries: [], deliveries: [], payments: [], gapLedger: [], entryEditLog: [], bankTx: [], projectNotes: [],
+  companyVehicles: [], companyContacts: [], companyFills: [], companyDisputes: [], fillsEnabled: false, fillsLoadError: null
 };
 let pending = { deliveries: [] };
 let benzinPending = { sales: [] };
@@ -633,7 +634,7 @@ function renderOfflineBanner(){
     ${offlineQueue.map(item=>`
       <div class="list-card" style="cursor:default">
         <div class="list-card-main">
-          <div class="list-card-name">${item.type==='metan_entry'?'Метан':'Бензин'} ҳисоботи — ${esc(item.payload.date)}</div>
+          <div class="list-card-name">${item.type==='company_fill' ? '⛽ Компанияга қуйиш — '+esc(plateDisplay(item.payload.plate))+' · '+fmtM3(item.payload.m3)+' m3 · '+esc(item.payload.fill_date) : (item.type==='metan_entry'?'Метан':'Бензин')+' ҳисоботи — '+esc(item.payload.date)}</div>
           <div class="list-card-meta">${item.status==='error'?`<span style="color:var(--bad)">${esc(item.error||'хато')}</span>`:'Юборилиши кутилмоқда…'}</div>
         </div>
         ${item.status==='error'?`<button class="btn danger small" onclick="discardQueueItem('${item.id}')">Ўчириш</button>`:''}
@@ -733,6 +734,7 @@ async function syncOfflineQueue(){
     try{
       if(item.type==='metan_entry') await submitMetanEntryPayload(item.payload);
       else if(item.type==='benzin_entry') await submitBenzinEntryPayload(item.payload);
+      else if(item.type==='company_fill') await submitCompanyFillPayload(item.payload);
       removeFromOfflineQueue(item.id);
       changed = true;
     }catch(e){
@@ -760,7 +762,8 @@ async function boot(){
 
   sb.auth.onAuthStateChange((event, session)=>{
     if(event === 'SIGNED_OUT'){ state = {session:null, profile:null, companies:[],prices:[],taxRates:[],fixedCosts:[],prepayments:[],otherExpenses:[],entries:[],deliveries:[],payments:[],
-      fuelTypes:[],fuelPrices:[],dispensers:[],benzinEntries:[],benzinCompanySales:[],benzinDeliveries:[],employees:[],employeeSalaries:[],gapLedger:[],entryEditLog:[],bankTx:[],projectNotes:[]}; renderLogin(); }
+      fuelTypes:[],fuelPrices:[],dispensers:[],benzinEntries:[],benzinCompanySales:[],benzinDeliveries:[],employees:[],employeeSalaries:[],gapLedger:[],entryEditLog:[],bankTx:[],projectNotes:[],
+      companyVehicles:[],companyContacts:[],companyFills:[],companyDisputes:[],fillsEnabled:false,fillsLoadError:null}; renderLogin(); }
   });
 }
 
@@ -940,6 +943,7 @@ async function loadAll(){
   state.entryEditLog = entryEditLog.data || [];
   state.bankTx = bankTx.data || [];
   state.projectNotes = projectNotes.data || [];
+  await loadFillsData();
   saveStateCache();
 }
 // Интернет бўлган пайтда юкланган маълумотни телефонда сақлаб қўяди —
@@ -1002,12 +1006,577 @@ function companyTotals(station){
     t.m3 += Number(d.m3)||0;
     t.sold += (Number(d.m3)||0) * price;
   });
+  // Кунлик ҳисоботга ҲАЛИ ўтмаган (entry_id йўқ) компания қуйишлари ҳам
+  // балансга дарров таъсир қилади — компания масъули Telegram'да кўрадиган
+  // баланс билан шу ердагиси бир хил чиқиши учун. Ҳисоботга ўтгач
+  // (deliveries ёзилгач) улар бу ерда санаймайди — иккита санаб юбориш йўқ.
+  (state.companyFills||[]).forEach(f=>{
+    if(f.status!=='active' || f.entry_id) return;
+    const t = totals[f.company_id]; if(!t) return;
+    const m3 = Number(f.m3)||0;
+    t.m3 += m3;
+    t.sold += Number(f.amount) || (m3 * (Number(f.price)||0));
+  });
   state.payments.forEach(p=>{
     const t = totals[p.company_id]; if(!t) return;
     t.paid += Number(p.amount)||0;
   });
   Object.values(totals).forEach(t => { t.balance = t.paid - t.sold; });
   return Object.values(totals);
+}
+
+
+// ============================================================
+// КОМПАНИЯ МАШИНАЛАРИ ВА ҲАР-ҚУЙИШ ЁЗУВЛАРИ (company_fills)
+// ------------------------------------------------------------
+// Операторлар шартномали компанияларга қуйилган газни ҲАР БИР
+// машина бўйича ёзади (рақам + m3). Ёзув битта — ундан:
+//   1) компания баланси (companyTotals) ва кунлик ҳисобот
+//      (автоматик тўлдирилади) ҳисобланади;
+//   2) Telegram бот компания масъулларига хабар юборади
+//      (хабарлар навбатини базанинг ўзи тузади — 001_company_fills.sql).
+// База ҳали янгиланмаган бўлса, бу бўлим ўчиқ кўринади ва
+// қолган сайт ҳеч қандай ўзгаришсиз ишлайди (state.fillsEnabled=false).
+// ============================================================
+const TASHKENT_OFFSET_MS = 5*3600*1000;
+function tashkentToday(){ return new Date(Date.now()+TASHKENT_OFFSET_MS).toISOString().slice(0,10); }
+const fmtM3 = n => (n===null||n===undefined||isNaN(n)) ? '—' : String(Math.round(Number(n)*100)/100);
+const valOf = id => { const el=document.getElementById(id); return el ? el.value : ''; };
+
+// Кирилл "ўхшаш" ҳарфлар (А В С Е Н К М О Р Т Х У) лотинга ўгирилади — база билан бир хил қоида.
+function normPlate(s){
+  const map = {'А':'A','В':'B','С':'C','Е':'E','Н':'H','К':'K','М':'M','О':'O','Р':'P','Т':'T','Х':'X','У':'Y'};
+  return String(s||'').toUpperCase().replace(/[АВСЕНКМОРТХУ]/g, ch=>map[ch]).replace(/[^0-9A-Z]/g,'');
+}
+function normPhone(s){ let d = String(s||'').replace(/\D/g,''); if(d.length===9) d='998'+d; return d; }
+function phonePretty(d){
+  d = String(d||'');
+  return d.length===12 ? `+${d.slice(0,3)} ${d.slice(3,5)} ${d.slice(5,8)} ${d.slice(8,10)} ${d.slice(10)}` : d;
+}
+function plateDisplay(p){
+  p = String(p||'');
+  let m = /^(\d{2})([A-Z])(\d{3})([A-Z]{2})$/.exec(p);   // 01A123BC
+  if(m) return `${m[1]} ${m[2]} ${m[3]} ${m[4]}`;
+  m = /^(\d{2})(\d{3})([A-Z]{3})$/.exec(p);              // 01123ABC
+  if(m) return `${m[1]} ${m[2]} ${m[3]}`;
+  return p;
+}
+function newUuid(){
+  if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c=>{ const r=Math.random()*16|0; return (c==='x'?r:(r&0x3|0x8)).toString(16); });
+}
+const companyName = id => (state.companies.find(c=>String(c.id)===String(id))||{}).name || '—';
+function companyEnrolled(companyId){
+  return (state.companyVehicles||[]).some(v=>String(v.company_id)===String(companyId) && v.status==='active');
+}
+
+// ---------------------------------------------------------------- маълумот юклаш
+async function fetchPaged(buildQuery){
+  const pageSize = 1000; let all = [], from = 0;
+  while(true){
+    const { data, error } = await buildQuery(from, from+pageSize-1);
+    if(error) throw error;
+    all = all.concat(data||[]);
+    if(!data || data.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+async function loadFillsData(){
+  try{
+    const role = state.profile && state.profile.role;
+    const since = new Date(Date.now()-21*86400000).toISOString().slice(0,10);
+    const [vehicles, recent, open] = await Promise.all([
+      fetchPaged((a,b)=> sb.from('company_vehicles').select('*').order('plate').range(a,b)),
+      fetchPaged((a,b)=> sb.from('company_fills').select('*').gte('fill_date', since).order('fill_at',{ascending:false}).order('id').range(a,b)),
+      fetchPaged((a,b)=> sb.from('company_fills').select('*').is('entry_id', null).eq('status','active').order('fill_at',{ascending:false}).order('id').range(a,b)),
+    ]);
+    const seen = new Set(); const fills = [];
+    recent.concat(open).forEach(f=>{ if(!seen.has(f.id)){ seen.add(f.id); fills.push(f); } });
+    state.companyVehicles = vehicles;
+    state.companyFills = fills;
+    state.fillsEnabled = true;
+    state.fillsLoadError = null;
+    // Интернет йўқлигида юборилмай турган қуйишлар рўйхатда ва балансда йўқолиб қолмасин
+    (offlineQueue||[]).forEach(it=>{
+      if(it.type==='company_fill' && it.status==='pending' && !state.companyFills.some(f=>f.client_id===it.payload.client_id)) addLocalQueuedFill(it.payload);
+    });
+    if(role==='ceo' || role==='direktor'){
+      const [con, dis] = await Promise.all([
+        sb.from('company_contacts').select('*').order('created_at'),
+        sb.from('company_disputes').select('*').order('created_at',{ascending:false}).limit(200)
+      ]);
+      state.companyContacts = con.data || [];
+      state.companyDisputes = dis.data || [];
+    } else {
+      state.companyContacts = []; state.companyDisputes = [];
+    }
+  }catch(e){
+    const msg = ((e && e.message) || '') + '';
+    const missing = e && (e.code==='42P01' || e.code==='PGRST205' || /does not exist|could not find the table|schema cache/i.test(msg));
+    if(missing){
+      // База ҳали янгиланмаган — бўлим ўчиқ, қолган сайт одатдагидек ишлайди.
+      state.fillsEnabled = false;
+      state.companyVehicles = []; state.companyFills = []; state.companyContacts = []; state.companyDisputes = [];
+    } else {
+      // Вақтинчалик хато (интернет ва ш.к.) — эски маълумот сақланади, ёзув ўчиб кетмайди.
+      state.fillsLoadError = msg || 'хато';
+    }
+  }
+}
+
+// ---------------------------------------------------------------- оператор экрани
+let fillsUiDate = null;
+function tplFills(){
+  if(!state.fillsEnabled){
+    return `<div class="card"><h2>⛽ Компанияга қуйиш</h2>
+      <div class="review-warn">⚠ Бу бўлим ҳали ишга туширилмаган (база янгиланмаган). CEO'га хабар беринг.</div></div>`;
+  }
+  return `
+  ${trainingToggleBtnHtml()}
+  ${trainingBannerHtml()}
+  ${state.fillsLoadError ? `<div class="review-warn" style="margin-bottom:12px">⚠ Охирги маълумотларни юклаб бўлмади (${esc(state.fillsLoadError)}). Рўйхат эски бўлиши мумкин.</div>` : ''}
+  <div class="card">
+    <div class="section-title"><h2>⛽ Компанияга қуйиш</h2></div>
+    <p class="hint">Машина рақамини (ёки охирги рақамларини) ёзинг, рўйхатдан танланг, неча m3 қуйилганини киритинг. Компанияга дарров Telegram'да хабар боради.</p>
+    <div class="row">
+      <div class="field" style="flex:2"><label>Машина рақами</label>
+        <input type="text" id="fl_search" autocomplete="off" autocapitalize="characters" placeholder="масалан 123 ёки 01A123BC" oninput="renderFillSearch()"></div>
+      <div class="field"><label>Сана</label>
+        <input type="date" id="fl_date" value="${fillsUiDate||tashkentToday()}" onchange="fillsUiDate=this.value;renderFillList()"></div>
+    </div>
+    <div id="fl_results"></div>
+  </div>
+  <div id="fl_staleBox"></div>
+  <div class="card">
+    <div class="section-title"><h2>Қуйишлар рўйхати</h2></div>
+    <div id="fl_list"></div>
+  </div>`;
+}
+function afterRenderFills(){ renderFillSearch(); renderFillList(); renderFillStale(); }
+
+function renderFillSearch(){
+  const box = document.getElementById('fl_results'); if(!box) return;
+  const q = normPlate(valOf('fl_search'));
+  const vehicles = (state.companyVehicles||[]).filter(v=>v.status==='active');
+  if(!vehicles.length){
+    box.innerHTML = `<div class="empty">Ҳали ҳеч бир компанияга машина қўшилмаган. CEO: Компаниялар → компания → «Машиналар ва масъул шахслар».</div>`;
+    return;
+  }
+  let list, head = '';
+  if(q.length >= 2){
+    list = vehicles.filter(v=>v.plate.includes(q)).slice(0,15);
+    if(!list.length){
+      box.innerHTML = `<div class="empty">«${esc(q)}» рақамли машина рўйхатда йўқ. Рўйхатда бўлмаган машинага қуйиб бўлмайди — компания масъулига ёки CEO'га хабар беринг.</div>`;
+      return;
+    }
+  } else {
+    const cnt = {};
+    (state.companyFills||[]).forEach(f=>{ if(f.status==='active') cnt[f.vehicle_id] = (cnt[f.vehicle_id]||0)+1; });
+    list = vehicles.filter(v=>cnt[v.id]).sort((a,b)=>cnt[b.id]-cnt[a.id]).slice(0,8);
+    if(!list.length){ box.innerHTML = `<div class="empty">Рақам ёзинг…</div>`; return; }
+    head = `<p class="hint" style="margin:6px 0 8px">Тез-тез қуядиган машиналар:</p>`;
+  }
+  box.innerHTML = head + list.map(v=>`
+    <button class="list-card" onclick="openFillSheet('${v.id}')">
+      <div class="list-card-main">
+        <div class="list-card-name" style="font-family:var(--font-mono)">${esc(plateDisplay(v.plate))}</div>
+        <div class="list-card-meta">${esc(companyName(v.company_id))}${v.model?' · '+esc(v.model):''}${v.color?' · '+esc(v.color):''}</div>
+      </div>
+      <div class="list-card-side"><span class="list-card-chevron">›</span></div>
+    </button>`).join('');
+}
+
+function openFillSheet(vehicleId){
+  const v = (state.companyVehicles||[]).find(x=>x.id===vehicleId); if(!v) return;
+  const tot = companyTotals('metan').find(t=>String(t.id)===String(v.company_id));
+  const bal = tot ? tot.paid - tot.sold : null;
+  const date = valOf('fl_date') || tashkentToday();
+  const price = priceFor(date).sale_price;
+  const last = (state.companyFills||[]).filter(f=>f.vehicle_id===v.id && f.status==='active')
+    .sort((a,b)=> new Date(b.fill_at)-new Date(a.fill_at))[0];
+  const minsAgo = last ? Math.round((Date.now()-new Date(last.fill_at).getTime())/60000) : null;
+  openSheet(`
+    <h2 style="margin-bottom:2px;font-family:var(--font-mono)">${esc(plateDisplay(v.plate))}</h2>
+    <p class="hint" style="margin:0 0 8px">${esc(companyName(v.company_id))}${v.model?' · '+esc(v.model):''}${v.color?' · '+esc(v.color):''}</p>
+    ${bal!==null ? `<span class="pill ${balanceTier(bal)}">Баланс: ${fmt(bal)} сўм — ${balanceLabel(bal)}</span>` : ''}
+    ${(minsAgo!==null && minsAgo < 90) ? `<div class="review-warn">⚠ Бу машинага ${Math.max(1,minsAgo)} дақиқа олдин ${fmtM3(last.m3)} m3 қуйилган. Такрор эмасми?</div>` : ''}
+    <div class="row" style="margin-top:12px">
+      <div class="field"><label>Неча m3 қуйилди</label>
+        <input type="number" id="fs_m3" step="0.01" inputmode="decimal" placeholder="масалан 11.5" oninput="updateFillSheetCalc('${v.id}')"></div>
+      <div class="field"><label>Колонка</label>
+        <select id="fs_pump"><option value="">—</option>${PUMP_NAMES.map((n,i)=>`<option value="${i+1}">${n}</option>`).join('')}</select></div>
+    </div>
+    <div class="company-card-balance" id="fs_sum" style="margin:6px 0">—</div>
+    <div id="fs_warn"></div>
+    <div class="field"><label>Изоҳ (ихтиёрий)</label><input type="text" id="fs_note"></div>
+    <input type="hidden" id="fs_price" value="${price}">
+    <button class="btn" id="fs_save" style="width:100%;margin-top:4px" onclick="saveFill('${v.id}')">Сақлаш</button>
+  `, { afterOpen: ()=>{ const el=document.getElementById('fs_m3'); if(el) setTimeout(()=>el.focus(), 250); } });
+}
+function updateFillSheetCalc(vehicleId){
+  const v = (state.companyVehicles||[]).find(x=>x.id===vehicleId);
+  const sumEl = document.getElementById('fs_sum'), warnEl = document.getElementById('fs_warn');
+  if(!v || !sumEl || !warnEl) return;
+  const m3 = parseFloat(String(valOf('fs_m3')).replace(',','.'));
+  const price = parseFloat(valOf('fs_price')) || 0;
+  if(!(m3>0)){ sumEl.innerHTML = '—'; warnEl.innerHTML = ''; return; }
+  const sum = m3*price;
+  sumEl.innerHTML = `${fmt(sum)}<span class="unit">сўм</span>`;
+  const tot = companyTotals('metan').find(t=>String(t.id)===String(v.company_id));
+  const after = tot ? (tot.paid - tot.sold - sum) : null;
+  let w = '';
+  if(m3 > 40) w += `<div class="review-warn">⚠ ${fmtM3(m3)} m3 — одатдагидан жуда кўп. Рақамни текширинг.</div>`;
+  if(after!==null && after < 0) w += `<div class="review-warn">⚠ Бу қуйишдан кейин компания баланси манфий бўлади (${fmt(after)} сўм).</div>`;
+  warnEl.innerHTML = w;
+}
+
+function friendlyFillError(e){
+  const msg = ((e && e.message) || '') + '';
+  if(/vehicle_not_active/.test(msg)) return "Бу машина рўйхатда фаол эмас — CEO'га хабар беринг";
+  if(/vehicle_company_mismatch|vehicle_not_found/.test(msg)) return "Машина топилмади ёки бошқа компанияники — саҳифани янгилаб қайта уриниб кўринг";
+  if(/fill_date_in_future/.test(msg)) return "Сана келажакда бўлиши мумкин эмас";
+  if(e && e.code==='42501') return "Рухсат йўқ (фақат метан оператори ёки CEO қуйиш киритади)";
+  return "Хатолик: " + (msg || 'сақланмади');
+}
+async function submitCompanyFillPayload(p){
+  const { error } = await sb.from('company_fills').insert(p);
+  if(error){
+    // client_id бўйича такрор — бу ёзув аввал юборилган (оффлайн навбатдан қайта уриниш), хато эмас.
+    if(error.code === '23505') return;
+    throw error;
+  }
+}
+function addLocalQueuedFill(p){
+  state.companyFills = state.companyFills || [];
+  state.companyFills.push({ id:'q_'+p.client_id, client_id:p.client_id, company_id:p.company_id, vehicle_id:p.vehicle_id,
+    plate:p.plate, fill_date:p.fill_date, fill_at:new Date().toISOString(), pump_no:p.pump_no, m3:p.m3, price:p.price,
+    amount:p.m3*p.price, status:'active', entry_id:null, operator_name:p.operator_name, _queued:true });
+  saveStateCache();
+}
+async function saveFill(vehicleId){
+  const v = (state.companyVehicles||[]).find(x=>x.id===vehicleId); if(!v) return;
+  const m3raw = parseFloat(String(valOf('fs_m3')).replace(',','.'));
+  if(!(m3raw>0) || m3raw>200){ toast("m3 ни тўғри киритинг"); return; }
+  const m3 = Math.round(m3raw*100)/100;
+  if(m3 > 40 && !confirm(`${fmtM3(m3)} m3 — жуда кўп. Тўғрими?`)) return;
+  const date = valOf('fl_date') || tashkentToday();
+  const price = priceFor(date).sale_price;
+  if(!price){ toast("Шу сана учун нарх топилмади"); return; }
+  const pump = valOf('fs_pump');
+  const payload = {
+    client_id: newUuid(), company_id: v.company_id, vehicle_id: v.id, plate: v.plate, fill_date: date,
+    pump_no: pump ? parseInt(pump,10) : null, m3, price,
+    operator_id: state.profile.id, operator_name: state.profile.full_name,
+    note: valOf('fs_note').trim() || null
+  };
+  if(trainingMode){ closeSheet(); toast("🎓 Машқ якунланди — ҳеч нарса сақланмади"); return; }
+  const btn = document.getElementById('fs_save');
+  if(btn){ btn.disabled = true; btn.textContent = 'Сақланмоқда…'; }
+  const queueIt = (msg)=>{
+    queueOfflineSubmission('company_fill', payload);
+    addLocalQueuedFill(payload);
+    closeSheet(); toast(msg);
+    renderOfflineBanner(); renderFillList(); renderFillSearch();
+  };
+  if(!isOnline()){ queueIt("📤 Интернет йўқ — қуйиш телефонда сақланди, интернет қайтганда ўзи юборилади"); return; }
+  try{
+    await submitCompanyFillPayload(payload);
+    closeSheet(); toast("Қуйиш сақланди ✓ — компанияга хабар юборилади");
+    await loadAll(); renderTab();
+  }catch(e){
+    if(isNetworkError(e)){ queueIt("📤 Интернетга уланиб бўлмади — қуйиш телефонда сақланди, ўзи юборилади"); return; }
+    toast(friendlyFillError(e));
+    if(btn){ btn.disabled = false; btn.textContent = 'Сақлаш'; }
+  }
+}
+
+function fillTimeStr(iso){
+  try{ return new Date(iso).toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit', timeZone:'Asia/Tashkent'}); }
+  catch(e){ return ''; }
+}
+function renderFillList(){
+  const box = document.getElementById('fl_list'); if(!box) return;
+  const date = valOf('fl_date') || tashkentToday();
+  const isCeo = state.profile.role === 'ceo';
+  const rows = (state.companyFills||[]).filter(f=>f.fill_date===date).sort((a,b)=> new Date(b.fill_at)-new Date(a.fill_at));
+  const active = rows.filter(f=>f.status==='active');
+  const byCo = {};
+  active.forEach(f=>{
+    const k = String(f.company_id); byCo[k] = byCo[k] || {m3:0, sum:0, n:0};
+    byCo[k].m3 += Number(f.m3)||0; byCo[k].sum += Number(f.amount) || (Number(f.m3)*Number(f.price)) || 0; byCo[k].n++;
+  });
+  const dateWarn = date !== tashkentToday()
+    ? `<div class="review-warn" style="margin-bottom:10px">⚠ Танланган сана бугунги эмас (${esc(date)}). Бугунги қуйишни ёзаётган бўлсангиз, санани тузатинг.</div>` : '';
+  const summary = Object.keys(byCo).length ? `
+    <div class="table-wrap" style="margin-bottom:12px"><table>
+      <thead><tr><th>Компания</th><th>Қуйиш</th><th>m3</th><th>Сумма</th></tr></thead>
+      <tbody>${Object.keys(byCo).map(k=>`<tr><td>${esc(companyName(k))}</td><td>${byCo[k].n}</td><td>${fmtM3(byCo[k].m3)}</td><td>${fmt(byCo[k].sum)}</td></tr>`).join('')}</tbody>
+    </table></div>
+    <p class="hint">Кун охирида бу йиғиндилар «Кунлик ҳисобот»даги «Компанияларга берилган газ» қисмига ўзи тушади.</p>` : '';
+  const table = rows.length ? `
+    <div class="table-wrap"><table>
+      <thead><tr><th>Вақт</th><th>Рақам</th><th>Компания</th><th>К</th><th>m3</th><th>Сумма</th>${isCeo?'<th></th>':''}</tr></thead>
+      <tbody>${rows.map(f=>{
+        const cancelled = f.status==='cancelled';
+        const st = cancelled ? 'text-decoration:line-through;opacity:.55' : '';
+        return `<tr style="${st}">
+          <td>${fillTimeStr(f.fill_at)}${f._queued?' <span class="pill warn" title="Юборилмаган">⏳</span>':''}</td>
+          <td style="font-family:var(--font-mono);white-space:nowrap">${esc(plateDisplay(f.plate))}</td>
+          <td>${esc(companyName(f.company_id))}</td>
+          <td>${f.pump_no ? esc(PUMP_NAMES[f.pump_no-1]||f.pump_no) : '—'}</td>
+          <td>${fmtM3(f.m3)}</td>
+          <td>${fmt(Number(f.amount) || Number(f.m3)*Number(f.price))}</td>
+          ${isCeo ? `<td>${(!cancelled && !f._queued) ? `<button class="del" onclick="cancelFillPrompt('${f.id}')" title="Бекор қилиш">✕</button>` : (cancelled ? '<span class="hint">бекор</span>' : '')}</td>` : ''}
+        </tr>`; }).join('')}</tbody>
+    </table></div>` : `<div class="empty">Бу сана учун ҳали қуйиш ёзилмаган</div>`;
+  box.innerHTML = dateWarn + summary + table;
+}
+
+// Кунлик ҳисоботга ўтмаган ЭСКИ (бугундан олдинги) қуйишлар
+function staleFills(){
+  const today = tashkentToday();
+  return (state.companyFills||[]).filter(f=>f.status==='active' && !f.entry_id && !f._queued && f.fill_date < today);
+}
+function staleFillsGroups(){
+  const g = {};
+  staleFills().forEach(f=>{
+    const k = f.company_id+'|'+f.fill_date;
+    g[k] = g[k] || { company_id:f.company_id, date:f.fill_date, m3:0, n:0 };
+    g[k].m3 += Number(f.m3)||0; g[k].n++;
+  });
+  return Object.values(g).sort((a,b)=> a.date<b.date?1:-1);
+}
+function renderFillStale(){
+  const box = document.getElementById('fl_staleBox'); if(!box) return;
+  const g = staleFillsGroups();
+  if(!g.length){ box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="card"><div class="review-warn" style="margin-top:0">⚠ Кунлик ҳисоботга ўтмаган эски қуйишлар бор:<br>
+    ${g.slice(0,10).map(x=>`• ${esc(x.date)} — ${esc(companyName(x.company_id))}: ${fmtM3(x.m3)} m3 (${x.n} та)`).join('<br>')}
+    <br><span style="font-weight:400">Шу кунлар учун кунлик ҳисобот киритилганда компания m3'си автоматик ўтади. Ҳисобот аллақачон киритилган бўлса — CEO «Таҳрирлаш» орқали компания m3'ни тўлдиради.</span></div></div>`;
+}
+
+async function cancelFillPrompt(id){
+  const f = (state.companyFills||[]).find(x=>x.id===id); if(!f) return;
+  const reason = prompt(`Бекор қилиш сабаби? (${plateDisplay(f.plate)}, ${fmtM3(f.m3)} m3)`);
+  if(reason === null) return;
+  if(!reason.trim()){ toast("Сабабни ёзинг"); return; }
+  const { data, error } = await sb.rpc('cancel_company_fill', { p_fill:id, p_reason:reason.trim() });
+  if(error){ toast("Хатолик: " + error.message); return; }
+  if(data && data.needs_entry_fix){
+    alert(`⚠️ Бу қуйиш аллақачон кунлик ҳисоботга ўтган эди.\n\nКомпания баланси тўғри бўлиши учун шу санадаги ҳисоботни «Таҳрирлаш» орқали очиб, компаниянинг m3 қийматини ${fmtM3(data.m3)} га камайтиринг.`);
+  } else {
+    toast("Бекор қилинди ✓ — компанияга хабар юборилади");
+  }
+  await loadAll(); renderTab();
+}
+
+// ---------------------------------------------------------------- кунлик ҳисоботга автоматик ўтказиш
+// Ҳисоботга ҳали ўтмаган қуйишлар йиғиндиси (сана ва компания бўйича)
+function fillsSumByCompany(date){
+  const m = {};
+  (state.companyFills||[]).forEach(f=>{
+    if(f.status==='active' && !f.entry_id && f.fill_date===date){
+      const k = String(f.company_id); m[k] = m[k] || {m3:0, n:0};
+      m[k].m3 += Number(f.m3)||0; m[k].n++;
+    }
+  });
+  return m;
+}
+let autoDeliverySkip = { date:null, ids:new Set() };
+function prefillDeliveriesFromFills(){
+  const dEl = document.getElementById('f_date');
+  if(!dEl || !state.fillsEnabled) return;
+  const date = dEl.value;
+  if(autoDeliverySkip.date !== date) autoDeliverySkip = { date, ids:new Set() };
+  const sums = fillsSumByCompany(date);
+  pending.deliveries = pending.deliveries.filter(d=>!d.auto);   // эски автоматик қаторлар янгиланади, қўлда киритилганлар қолади
+  Object.keys(sums).forEach(key=>{
+    if(autoDeliverySkip.ids.has(key)) return;
+    if(pending.deliveries.some(d=>String(d.company_id)===key)) return;
+    const c = state.companies.find(x=>String(x.id)===key); if(!c) return;
+    pending.deliveries.push({ company_id:c.id, companyName:c.name, m3:Math.round(sums[key].m3*100)/100, auto:true, fills:sums[key].n });
+  });
+  renderDeliveryGrid(); recalcPreview();
+}
+// Текшириш экранида: ҳисобот билан қуйишлар йиғиндиси мос келмаса огоҳлантиради
+function fillsDiffWarnHtml(date){
+  if(!state.fillsEnabled) return '';
+  const sums = fillsSumByCompany(date);
+  const lines = [], handled = new Set();
+  pending.deliveries.forEach(d=>{
+    const k = String(d.company_id); handled.add(k);
+    const s = sums[k];
+    if(s && Math.abs(s.m3 - d.m3) > 0.005){
+      lines.push(`${esc(d.companyName)}: ҳисоботда ${fmtM3(d.m3)} m3, тизимдаги қуйишлар йиғиндиси ${fmtM3(s.m3)} m3`);
+    } else if(!s && companyEnrolled(d.company_id)){
+      lines.push(`${esc(d.companyName)}: ҳисоботда ${fmtM3(d.m3)} m3, лекин тизимда шу кун учун қуйиш ёзилмаган`);
+    }
+  });
+  Object.keys(sums).forEach(k=>{
+    if(!handled.has(k)) lines.push(`${esc(companyName(k))}: тизимда ${fmtM3(sums[k].m3)} m3 қуйиш бор, лекин ҳисоботга киритилмаган`);
+  });
+  return lines.length
+    ? `<div class="review-warn">⚠ Компанияларга қуйиш ёзувлари ҳисоботга мос эмас:<br>${lines.join('<br>')}<br><span style="font-weight:400">Агар шундай бўлиши керак бўлса, давом этаверинг; акс ҳолда ортга қайтиб тузатинг.</span></div>`
+    : '';
+}
+
+// ---------------------------------------------------------------- «Компаниялар» бўлими: огоҳлантиришлар
+function fillsAlertsHtml(role){
+  if(!state.fillsEnabled) return '';
+  let html = '';
+  const g = staleFillsGroups();
+  if(g.length){
+    html += `<div class="card"><div class="section-title"><h2>⚠ Ҳисоботга ўтмаган қуйишлар</h2></div>
+      <p class="hint">Баланс буларни ҳисобга олган, лекин кунлик ҳисоботда компанияга берилган газ ёзилмаган (ёки ҳисобот кейин киритилган).${role==='ceo'?' Ҳисоботни «Таҳрирлаш» орқали очиб, компания m3\'ни тўлдиринг.':''}</p>
+      <div class="table-wrap"><table><thead><tr><th>Сана</th><th>Компания</th><th>m3</th><th>Қуйиш</th></tr></thead>
+      <tbody>${g.slice(0,15).map(x=>`<tr><td>${esc(x.date)}</td><td>${esc(companyName(x.company_id))}</td><td>${fmtM3(x.m3)}</td><td>${x.n}</td></tr>`).join('')}</tbody></table></div></div>`;
+  }
+  const open = (state.companyDisputes||[]).filter(d=>d.status==='open');
+  if(open.length){
+    html += `<div class="card"><div class="section-title"><h2>❗ Компания эътирозлари (${open.length})</h2></div>
+      <p class="hint">Компания масъули Telegram'да «Нотўғри» тугмасини босган қуйишлар.</p>
+      ${open.map(d=>{
+        const f = (state.companyFills||[]).find(x=>x.id===d.fill_id);
+        return `<div class="list-card" style="cursor:default;flex-wrap:wrap">
+          <div class="list-card-main">
+            <div class="list-card-name">${esc(companyName(d.company_id))}${f?' — '+esc(plateDisplay(f.plate)):''}</div>
+            <div class="list-card-meta">${f?esc(f.fill_date)+' · '+fmtM3(f.m3)+' m3 · '+fmt(Number(f.amount)||0)+' сўм':'эски қуйиш'} · ${esc(String(d.created_at||'').slice(0,10))}${d.reason?' · «'+esc(d.reason)+'»':''}</div>
+          </div>
+          ${role==='ceo'?`<div class="list-card-side">
+            <button class="btn small" onclick="resolveDispute('${d.id}','resolved')">Ҳал қилинди</button>
+            <button class="btn secondary small" onclick="resolveDispute('${d.id}','rejected')">Рад этиш</button></div>`:''}
+        </div>`; }).join('')}
+    </div>`;
+  }
+  return html;
+}
+async function resolveDispute(id, status){
+  const note = prompt(status==='resolved' ? 'Қандай ҳал қилинди? (изоҳ)' : 'Нега рад этилди? (изоҳ)');
+  if(note === null) return;
+  const { error } = await sb.from('company_disputes').update({
+    status, resolution_note: note.trim() || null,
+    resolved_by_name: state.profile.full_name, resolved_at: new Date().toISOString()
+  }).eq('id', id);
+  if(error){ toast("Хатолик: " + error.message); return; }
+  toast("Сақланди ✓");
+  await loadAll(); renderTab();
+}
+
+// ---------------------------------------------------------------- компания машиналари ва масъуллари (CEO бошқаради)
+function friendlyFleetError(e){
+  const msg = ((e && e.message) || '') + '';
+  if(e && e.code==='23505') return "Бу рақам/телефон аллақачон рўйхатда. " + ((e.details||'').replace(/^Key /,'')||'');
+  if(/plate_invalid/.test(msg)) return "Рақам нотўғри (5–10 та ҳарф/рақам бўлиши керак)";
+  if(/phone_invalid/.test(msg)) return "Телефон нотўғри (масалан 90 123 45 67)";
+  if(/max_2_contacts/.test(msg)) return "Бир компанияда кўпи билан 2 та масъул бўлиши мумкин";
+  if(e && e.code==='42501') return "Рухсат йўқ (фақат CEO ўзгартира олади)";
+  return "Хатолик: " + (msg || 'сақланмади');
+}
+function openCompanyFleetSheet(companyId){
+  if(!state.fillsEnabled){ toast("Бўлим ҳали ишга туширилмаган (база янгиланмаган)"); return; }
+  const canEdit = state.profile.role === 'ceo';
+  const c = state.companies.find(x=>String(x.id)===String(companyId)); if(!c) return;
+  const vehicles = (state.companyVehicles||[]).filter(v=>String(v.company_id)===String(companyId) && v.status!=='removed')
+    .sort((a,b)=>a.plate.localeCompare(b.plate));
+  const contacts = (state.companyContacts||[]).filter(x=>String(x.company_id)===String(companyId) && x.active);
+  const canAddContact = canEdit && contacts.length < 2;
+  openSheet(`
+    <h2 style="margin-bottom:2px">${esc(c.name)}</h2>
+    <p class="hint" style="margin:0 0 10px">Машиналар ва Telegram'да хабар оладиган масъул шахслар</p>
+
+    <h3>Масъул шахслар (${contacts.length}/2)</h3>
+    <p class="hint">Масъул Telegram ботга кириб, шу телефон рақамини юборганда ботга уланади. Улар ҳар қуйишдан кейин хабар олади, балансни ва охирги 30 кунни кўради.</p>
+    ${contacts.map(x=>`<div class="list-card" style="cursor:default">
+      <div class="list-card-main"><div class="list-card-name">${esc(x.full_name)}</div>
+        <div class="list-card-meta">${esc(phonePretty(x.phone))} · ${x.telegram_chat_id ? '✅ Telegram\'га уланган' : '⏳ ҳали уланмаган'}</div></div>
+      ${canEdit?`<div class="list-card-side"><button class="del" title="Ўчириш" onclick="deactivateContact('${companyId}','${x.id}')">✕</button></div>`:''}
+    </div>`).join('') || '<div class="empty">Ҳали масъул шахс қўшилмаган</div>'}
+    ${canAddContact?`<div class="action-box"><h3>+ Масъул шахс қўшиш</h3>
+      <div class="row"><div class="field"><label>Ф.И.Ш.</label><input type="text" id="cc_name"></div>
+      <div class="field"><label>Телефон</label><input type="tel" id="cc_phone" placeholder="90 123 45 67"></div></div>
+      <button class="btn" style="width:100%" onclick="addContact('${companyId}')">Қўшиш</button></div>`:''}
+
+    <h3 style="margin-top:18px">Рухсат этилган машиналар (${vehicles.length})</h3>
+    <div class="table-wrap"><table><thead><tr><th>Рақам</th><th>Русуми</th><th>Ранги</th>${canEdit?'<th></th>':''}</tr></thead>
+      <tbody>${vehicles.map(v=>`<tr><td style="font-family:var(--font-mono);white-space:nowrap">${esc(plateDisplay(v.plate))}</td><td>${esc(v.model||'')}</td><td>${esc(v.color||'')}</td>
+        ${canEdit?`<td><button class="del" title="Рўйхатдан олиш" onclick="removeVehicle('${companyId}','${v.id}')">✕</button></td>`:''}</tr>`).join('')
+        || `<tr><td colspan="${canEdit?4:3}" class="empty">Ҳали машина қўшилмаган</td></tr>`}</tbody></table></div>
+    ${canEdit?`
+    <div class="action-box"><h3>+ Битта машина қўшиш</h3>
+      <div class="row"><div class="field"><label>Рақам</label><input type="text" id="cv_plate" autocapitalize="characters" placeholder="01A123BC"></div>
+      <div class="field"><label>Русуми</label><input type="text" id="cv_model"></div>
+      <div class="field"><label>Ранги</label><input type="text" id="cv_color"></div></div>
+      <div class="field"><label>Асос (мажбурий) — рўйхатни ким, қачон, қандай берди</label><input type="text" id="cv_proof" placeholder="масалан: хат 12.11.2026, Telegram орқали Алишер"></div>
+      <button class="btn" style="width:100%" onclick="addVehicle('${companyId}')">Қўшиш</button></div>
+    <div class="action-box"><h3>+ Кўплаб қўшиш (компания рўйхатини ёпиштиринг)</h3>
+      <p class="hint">Ҳар қаторда битта машина: <b>рақам, русуми, ранги</b> (русуми ва ранги ихтиёрий). Бирортаси нотўғри ёки такрор бўлса, ҳеч бири қўшилмайди.</p>
+      <div class="field"><textarea id="cv_bulk" rows="6" placeholder="01A123BC, Cobalt, оқ&#10;01B456CD, Damas, қора"></textarea></div>
+      <div class="field"><label>Асос (мажбурий)</label><input type="text" id="cv_bulk_proof" placeholder="масалан: хат 12.11.2026"></div>
+      <button class="btn" style="width:100%" onclick="addVehiclesBulk('${companyId}')">Ҳаммасини қўшиш</button></div>`:''}
+  `);
+}
+async function afterFleetChange(companyId){
+  await loadAll();
+  openCompanyFleetSheet(companyId);
+  renderTab();
+}
+async function addVehicle(companyId){
+  const plate = normPlate(valOf('cv_plate'));
+  if(plate.length < 5){ toast("Рақамни тўғри киритинг"); return; }
+  const proof = valOf('cv_proof').trim();
+  if(!proof){ toast("«Асос»ни ёзинг (рўйхатни ким, қачон берган)"); return; }
+  const { error } = await sb.from('company_vehicles').insert({
+    company_id: companyId, plate, model: valOf('cv_model').trim()||null, color: valOf('cv_color').trim()||null,
+    proof, status:'active', source:'ceo', added_by_name: state.profile.full_name
+  });
+  if(error){ toast(friendlyFleetError(error)); return; }
+  toast("Машина қўшилди ✓");
+  await afterFleetChange(companyId);
+}
+async function addVehiclesBulk(companyId){
+  const proof = valOf('cv_bulk_proof').trim();
+  if(!proof){ toast("«Асос»ни ёзинг (рўйхатни ким, қачон берган)"); return; }
+  const lines = valOf('cv_bulk').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  if(!lines.length){ toast("Рўйхат бўш"); return; }
+  const rows = [], seen = new Set();
+  for(const line of lines){
+    const parts = line.split(/[,;\t]/).map(s=>s.trim());
+    const plate = normPlate(parts[0]);
+    if(plate.length < 5){ toast(`Нотўғри рақам: «${parts[0]}»`); return; }
+    if(seen.has(plate)){ toast(`Рўйхатда такрор: ${plate}`); return; }
+    seen.add(plate);
+    rows.push({ company_id: companyId, plate, model: parts[1]||null, color: parts[2]||null, proof, status:'active', source:'ceo', added_by_name: state.profile.full_name });
+  }
+  if(!confirm(`${rows.length} та машина қўшилади. Давом этамизми?`)) return;
+  const { error } = await sb.from('company_vehicles').insert(rows);
+  if(error){ toast(friendlyFleetError(error)); return; }
+  toast(`${rows.length} та машина қўшилди ✓`);
+  await afterFleetChange(companyId);
+}
+async function removeVehicle(companyId, vehicleId){
+  const v = (state.companyVehicles||[]).find(x=>x.id===vehicleId); if(!v) return;
+  if(!confirm(`${plateDisplay(v.plate)} машинасини рўйхатдан оласизми? Унга бундан кейин қуйиб бўлмайди, компанияга хабар юборилади.`)) return;
+  const { error } = await sb.from('company_vehicles').update({ status:'removed' }).eq('id', vehicleId);
+  if(error){ toast(friendlyFleetError(error)); return; }
+  toast("Рўйхатдан олинди ✓");
+  await afterFleetChange(companyId);
+}
+async function addContact(companyId){
+  const name = valOf('cc_name').trim(), phone = normPhone(valOf('cc_phone'));
+  if(!name){ toast("Исмни ёзинг"); return; }
+  if(!/^998\d{9}$/.test(phone)){ toast("Телефонни тўғри киритинг (масалан 90 123 45 67)"); return; }
+  const { error } = await sb.from('company_contacts').insert({ company_id: companyId, full_name: name, phone, added_by_name: state.profile.full_name });
+  if(error){ toast(friendlyFleetError(error)); return; }
+  toast("Масъул қўшилди ✓");
+  await afterFleetChange(companyId);
+}
+async function deactivateContact(companyId, contactId){
+  if(!confirm("Бу масъулни ўчирасизми? У Telegram'да хабар олмайди ва маълумотни кўра олмайди.")) return;
+  const { error } = await sb.from('company_contacts').update({ active:false }).eq('id', contactId);
+  if(error){ toast(friendlyFleetError(error)); return; }
+  toast("Ўчирилди ✓");
+  await afterFleetChange(companyId);
 }
 
 // ============================================================
@@ -1018,9 +1587,9 @@ function companyTotals(station){
 // станциянинг табларини кўради (currentStation орқали ажратилади).
 function tabsForRole(role, station){
   if(station === 'metan'){
-    if(role === 'operator') return [['entry','📝 Кунлик ҳисобот'],['reports','📊 Ҳисоботлар'],['davlat','🏛 Давлат ҳисоботи'],['petty','🧾 Кунлик майда харажатлар']];
+    if(role === 'operator') return [['entry','📝 Кунлик ҳисобот'],['fills','⛽ Компанияга қуйиш'],['reports','📊 Ҳисоботлар'],['davlat','🏛 Давлат ҳисоботи'],['petty','🧾 Кунлик майда харажатлар']];
     if(role === 'direktor') return [['overview','🏠 Умумий'],['reports','📊 Ҳисоботлар'],['davlat','🏛 Давлат ҳисоботи'],['gap','💰 Фарқ фонди'],['companies','🏢 Компаниялар'],['expenses','💸 Харажатлар'],['salaries','👥 Ойликлар']];
-    return [['entry','📝 Кунлик ҳисобот'],['overview','🏠 Умумий'],['reports','📊 Ҳисоботлар'],['davlat','🏛 Давлат ҳисоботи'],['gap','💰 Фарқ фонди'],['companies','🏢 Компаниялар'],['expenses','💸 Харажатлар'],['salaries','👥 Ойликлар'],['settings','⚙️ Созламалар']];
+    return [['entry','📝 Кунлик ҳисобот'],['fills','⛽ Компанияга қуйиш'],['overview','🏠 Умумий'],['reports','📊 Ҳисоботлар'],['davlat','🏛 Давлат ҳисоботи'],['gap','💰 Фарқ фонди'],['companies','🏢 Компаниялар'],['expenses','💸 Харажатлар'],['salaries','👥 Ойликлар'],['settings','⚙️ Созламалар']];
   }
   if(station === 'benzin'){
     if(role === 'operator') return [['bz_daily','📝 Кунлик ишлар'],['bz_expenses','💸 Харажатлар']];
@@ -1036,7 +1605,7 @@ function tabsForRole(role, station){
 // Табларни мантиқий гуруҳларга ажратиш — навигацияда гуруҳлар орасига
 // нозик ажратувчи чизиқ қўйилади (оддий бир қатор рўйхат эмас).
 function tabGroup(id){
-  if(id==='entry' || id==='bz_daily' || id==='petty') return 'work';
+  if(id==='entry' || id==='fills' || id==='bz_daily' || id==='petty') return 'work';
   if(id==='overview' || id==='dashboard' || id==='finance' || id==='projects') return 'overview';
   if(id==='reports' || id==='davlat' || id==='gap' || id==='bz_reports') return 'reports';
   if(id==='companies' || id==='expenses' || id==='salaries' || id==='bz_expenses' || id==='bz_salaries') return 'manage';
@@ -1047,6 +1616,7 @@ function tabGroup(id){
 // шунинг учун жиддий/корпоратив кўринади. currentColor орқали фаол/
 // нофаол ҳолатга қараб ранги ўзи ўзгаради.
 const TAB_ICONS = {
+  fills: '<path d="M3 22V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"/><path d="M3 22h12"/><path d="M7 9h4"/><path d="M15 12h2a2 2 0 0 1 2 2v3a1.5 1.5 0 0 0 3 0V9l-3-3"/>',
   entry: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   bz_daily: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   overview: '<path d="M3 9l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/>',
@@ -1088,6 +1658,7 @@ function tabGroupColor(id){
 const QUICK_TABS = {
   'metan_direktor': ['overview','reports','expenses'],
   'metan_ceo': ['overview','entry','expenses'],
+  'metan_operator': ['entry','fills','reports'],
   'benzin_ceo': ['bz_daily','bz_reports','bz_expenses'],
 };
 // Жорий роль/станция учун пастки навигация таркибини ҳисоблайди:
@@ -1351,6 +1922,7 @@ function renderTab(){
   const role = state.profile.role;
   if(activeTab==='home') body.innerHTML = tplHomeGrid(homeGridTabs);
   else if(activeTab==='entry') body.innerHTML = tplEntry();
+  else if(activeTab==='fills') body.innerHTML = tplFills();
   else if(activeTab==='overview') body.innerHTML = tplOverview();
   else if(activeTab==='reports') body.innerHTML = tplReports();
   else if(activeTab==='davlat') body.innerHTML = tplDavlat();
@@ -1376,6 +1948,10 @@ function afterRenderTab(){
     buildPumpFields(); renderDeliveryGrid(); recalcPreview();
     document.getElementById('f_date').value = todayISO();
     updateEntryDateWarning('metan');
+    prefillDeliveriesFromFills();
+  }
+  if(activeTab==='fills'){
+    afterRenderFills();
   }
   if(activeTab==='bz_daily'){
     afterRenderBenzinDaily();
@@ -1732,7 +2308,7 @@ function tplEntry(){
   <div class="card">
     <div class="section-title"><h2>Бугунги ҳисобот</h2></div>
     <div class="row">
-      <div class="field"><label>Сана</label><input type="date" id="f_date" oninput="updateEntryDateWarning('metan')"></div>
+      <div class="field"><label>Сана</label><input type="date" id="f_date" oninput="updateEntryDateWarning('metan');prefillDeliveriesFromFills()"></div>
       <div class="field"><label>Оператор</label><input type="text" id="f_operator" value="${esc(state.profile.full_name)}" disabled></div>
     </div>
     <div id="f_dateWarn"></div>
@@ -1824,7 +2400,7 @@ function renderDeliveryGrid(){
     const entry = pending.deliveries.find(d=>d.company_id===c.id);
     return `<div class="company-card tappable" onclick="openDeliveryEntrySheet('${c.id}')" role="button" tabindex="0">
       <div class="company-card-top"><div class="company-card-name">${esc(c.name)}</div></div>
-      ${entry ? `<span class="pill good">${fmt(entry.m3)} m3 қўшилди</span>` : `<div class="hint" style="margin-top:4px">Босиб киритинг →</div>`}
+      ${entry ? `<span class="pill good">${fmtM3(entry.m3)} m3 қўшилди</span>${entry.auto?`<div class="hint" style="margin-top:4px">қуйишлардан автоматик (${entry.fills} та)</div>`:''}` : `<div class="hint" style="margin-top:4px">Босиб киритинг →</div>`}
     </div>`;
   }).join('') || `<div class="empty">Ҳали компания қўшилмаган</div>`;
 }
@@ -1844,12 +2420,13 @@ function saveDeliveryEntry(companyId){
   if(!m3){ toast("m3 киритинг"); return; }
   const c = state.companies.find(x=>x.id===companyId);
   const existing = pending.deliveries.find(d=>d.company_id===companyId);
-  if(existing){ existing.m3 = m3; } else { pending.deliveries.push({company_id:companyId, companyName:c.name, m3}); }
+  if(existing){ existing.m3 = m3; existing.auto = false; } else { pending.deliveries.push({company_id:companyId, companyName:c.name, m3}); }
   closeSheet();
   renderDeliveryGrid();
   recalcPreview();
 }
 function removeDeliveryEntry(companyId){
+  autoDeliverySkip.ids.add(String(companyId));   // оператор автоматик қаторни ўчирса, қайта қўшилмасин
   pending.deliveries = pending.deliveries.filter(d=>d.company_id!==companyId);
   closeSheet();
   renderDeliveryGrid();
@@ -1918,7 +2495,7 @@ function openReview(){
   ).join('');
 
   const delRows = pending.deliveries.length
-    ? pending.deliveries.map(d=>`<div class="review-row"><span class="k">${esc(d.companyName)}</span><span>${fmt(d.m3)} m3</span></div>`).join('')
+    ? pending.deliveries.map(d=>`<div class="review-row"><span class="k">${esc(d.companyName)}</span><span>${fmtM3(d.m3)} m3</span></div>`).join('')
     : `<div class="review-row"><span class="k">—</span><span>Йўқ</span></div>`;
 
   const gapWarn = Math.abs(f.calc.soldM3 - f.agres) > 300
@@ -1966,6 +2543,7 @@ function openReview(){
       ${f.izoh ? `<div class="review-section"><h3>Изоҳ</h3><p style="font-size:.9rem">${esc(f.izoh)}</p></div>` : ''}
 
       ${gapWarn}
+      ${fillsDiffWarnHtml(f.date)}
 
       <label style="display:flex;gap:6px;align-items:center;margin:16px 0 10px"><input type="checkbox" id="review_confirm" style="width:auto" onchange="document.getElementById('reviewSubmitBtn').disabled=!this.checked"> Юқоридаги маълумотларнинг ҳаммасини текширдим, тўғри деб тасдиқлайман</label>
 
@@ -2883,6 +3461,7 @@ function tplCompanies(role){
 
   return `
   ${pushSubscribeCardHtml()}
+  ${fillsAlertsHtml(role)}
   <div class="card group-company">
     <div class="section-title">
       <h2>Компаниялар баланси</h2>
@@ -2958,6 +3537,7 @@ function openCompanyDetail(id){
       <div><span class="k">Сотилган сумма</span><span class="v">${fmt(c.sold)}</span></div>
       <div><span class="k">Тўланган</span><span class="v">${fmt(c.paid)}</span></div>
     </div>
+    ${state.fillsEnabled && (role==='ceo'||role==='direktor') ? `<button class="btn secondary" style="width:100%;margin-top:14px" onclick="openCompanyFleetSheet('${id}')">🚛 Машиналар ва масъул шахслар (${(state.companyVehicles||[]).filter(v=>String(v.company_id)===String(id)&&v.status==='active').length})</button>` : ''}
     ${canPay?`
     <div class="action-box">
       <h3>+ Тўлов қўшиш</h3>
