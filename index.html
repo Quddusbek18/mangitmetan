@@ -1494,7 +1494,7 @@ function openCompanyFleetSheet(companyId){
     </div>`).join('') || '<div class="empty">Ҳали масъул шахс қўшилмаган</div>'}
     ${canAddContact?`<div class="action-box"><h3>+ Масъул шахс қўшиш</h3>
       <div class="row"><div class="field"><label>Ф.И.Ш.</label><input type="text" id="cc_name"></div>
-      <div class="field"><label>Телефон</label><input type="tel" id="cc_phone" placeholder="90 123 45 67"></div></div>
+      <div class="field"><label>Телефон</label><input type="tel" id="cc_phone" placeholder="90 123 45 67 ёки +61 402 721 486"></div></div>
       <button class="btn" style="width:100%" onclick="addContact('${companyId}')">Қўшиш</button></div>`:''}
 
     <h3 style="margin-top:18px">Рухсат этилган машиналар (${vehicles.length})</h3>
@@ -1565,7 +1565,7 @@ async function removeVehicle(companyId, vehicleId){
 async function addContact(companyId){
   const name = valOf('cc_name').trim(), phone = normPhone(valOf('cc_phone'));
   if(!name){ toast("Исмни ёзинг"); return; }
-  if(!/^998\d{9}$/.test(phone)){ toast("Телефонни тўғри киритинг (масалан 90 123 45 67)"); return; }
+  if(!/^\d{10,15}$/.test(phone)){ toast("Телефонни тўғри киритинг: 90 123 45 67 ёки давлат коди билан (+61 402 721 486)"); return; }
   const { error } = await sb.from('company_contacts').insert({ company_id: companyId, full_name: name, phone, added_by_name: state.profile.full_name });
   if(error){ toast(friendlyFleetError(error)); return; }
   toast("Масъул қўшилди ✓");
